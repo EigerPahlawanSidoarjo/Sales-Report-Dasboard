@@ -36,7 +36,7 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 <header><div class="tag">EIGER ADVENTURE Â· STORE 2077</div><h1>SALES REPORT</h1><p>Eiger Pahlawan Sidoarjo</p></header>
 <main>
 <section class="toolbar">
- <div class="field"><label>SUMBER DATA UTAMA</label><div style="padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#f8faf8">Google Spreadsheet · CSV otomatis</div></div>
+ <div class="field"><label>SUMBER DATA UTAMA</label><div style="padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#f8faf8">Google Spreadsheet · cek otomatis tiap 60 detik</div></div>
  <div class="field"><label>BULAN LAPORAN</label><input id="month" type="month"></div>
  <div class="field"><label>STATUS BILL</label><select id="status"><option value="valid">Delivered + Shipped</option><option value="all">Semua status</option><option value="delivered">Delivered saja</option></select></div>
  <button id="refresh" class="secondary">↻ Sinkronkan Spreadsheet</button>
@@ -59,11 +59,15 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 </section>
 <section class="card" style="margin-bottom:14px"><h2>Detail Ringkasan Kategori</h2><div class="table-wrap"><table><thead><tr><th>Category Lv.3</th><th>Category Lv.4</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Kontribusi</th></tr></thead><tbody id="categoryDetail"></tbody></table></div></section>
 </main>
-<footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard mengambil data terbaru saat halaman dibuka atau tombol sinkronisasi ditekan. Upload Excel hanya tersedia sebagai cadangan.</footer>
+<footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
 <script>
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqErtuNGODAWJjSPa76gemZ4sT9ZQ-nS1AtDoz4CMLF5rRKyUWuQv3qAQB4XyYfjyJs_wFbpTQwYEL/pub?gid=680094323&single=true&output=csv";
 const $=id=>document.getElementById(id);
 let sourceRows=[];
+let lastCsvText='';
+let isManualUpload=false;
+let syncInProgress=false;
+const AUTO_SYNC_MS=60000;
 const rupiah=n=>'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');
 const number=n=>(Number(n)||0).toLocaleString('id-ID');
 const clean=v=>String(v??'').replace(/^\uFEFF/,'').trim();
@@ -126,18 +130,27 @@ function loadRows(rows,name){
  if(dates.length){const d=dates[dates.length-1];$('month').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
  render();
 }
-async function loadPublishedCsv(){
- $('fileInfo').textContent='Mengambil data terbaru dari Google Spreadsheet...';
+async function loadPublishedCsv(silent=false){
+ if(syncInProgress||isManualUpload)return;
+ syncInProgress=true;
+ if(!silent||!sourceRows.length)$('fileInfo').textContent='Mengecek pembaruan Google Spreadsheet...';
  try{
-  const response=await fetch(CSV_URL+'&_refresh='+Date.now(),{cache:'no-store'});
+  const separator=CSV_URL.includes('?')?'&':'?';
+  const response=await fetch(CSV_URL+separator+'_refresh='+Date.now(),{cache:'no-store'});
   if(!response.ok)throw Error('HTTP '+response.status);
   const csv=await response.text();
   if(!csv||csv.trim().startsWith('<'))throw Error('Google tidak mengembalikan CSV. Pastikan tab sudah dipublikasikan ke web.');
-  loadRows(parseCSV(csv),'Google Spreadsheet · sinkron otomatis');
+  if(csv!==lastCsvText){
+   loadRows(parseCSV(csv),'Google Spreadsheet · data terbaru');
+   lastCsvText=csv;
+   $('fileInfo').textContent='✓ Data diperbarui otomatis · '+new Date().toLocaleTimeString('id-ID')+' · '+number(sourceRows.length)+' baris';
+  }else if(!silent){
+   $('fileInfo').textContent='✓ Data sudah paling baru · diperiksa '+new Date().toLocaleTimeString('id-ID');
+  }
  }catch(err){
-  $('fileInfo').textContent='Gagal sinkron: '+err.message+' · Coba refresh atau upload Excel';
+  $('fileInfo').textContent=(sourceRows.length?'Data terakhir tetap ditampilkan · ':'Gagal sinkron: ')+err.message;
   console.error('Gagal mengambil CSV DSR:',err);
- }
+ }finally{syncInProgress=false}
 }
 function loadWorkbook(buffer,name){
  const wb=XLSX.read(buffer,{type:'array',cellDates:true});
@@ -191,12 +204,21 @@ function render(){
 }
 $('file').addEventListener('change',async e=>{
  const f=e.target.files[0];if(!f)return;
- try{const ext=f.name.toLowerCase();if(ext.endsWith('.csv'))loadRows(parseCSV(await f.text()),f.name);else loadWorkbook(await f.arrayBuffer(),f.name)}
- catch(err){alert('Gagal membaca file: '+err.message)}
+ try{
+  const ext=f.name.toLowerCase();
+  if(ext.endsWith('.csv'))loadRows(parseCSV(await f.text()),f.name);else loadWorkbook(await f.arrayBuffer(),f.name);
+  isManualUpload=true;
+  $('fileInfo').textContent='Mode upload manual aktif · refresh spreadsheet otomatis dijeda';
+ }catch(err){alert('Gagal membaca file: '+err.message)}
 });
+$('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
 $('month').addEventListener('change',render);
 $('status').addEventListener('change',render);
-$('refresh').addEventListener('click',loadPublishedCsv);
-loadPublishedCsv();
+// Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
+loadPublishedCsv(false);
+setInterval(()=>loadPublishedCsv(true),AUTO_SYNC_MS);
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden&&!isManualUpload)loadPublishedCsv(true);
+});
 </script>
 </body></html>
