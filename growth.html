@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EIGER Pahlawan | Sales Growth 2025 vs 2026</title>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#17211c;--muted:#68756e;--line:#e3e9e5;--green:#176b45;--red:#b42318}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Arial,sans-serif}
+header{background:#14251d;color:#fff;padding:22px max(18px,calc((100% - 1100px)/2))}
+header small{color:#b8d5c4;letter-spacing:2px}h1{font-size:24px;margin:5px 0}header p{margin:0;color:#c9d8cf}
+main{max-width:1100px;margin:22px auto;padding:0 16px}
+.toolbar,.card{background:var(--card);border:1px solid var(--line);border-radius:13px}
+.toolbar{padding:14px;display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:16px}
+.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:11px;color:var(--muted);font-weight:bold}
+select,button{font:inherit;border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:#fff;color:var(--ink)}
+button{background:var(--green);color:#fff;border:0;font-weight:bold;cursor:pointer}
+.status{margin-left:auto;color:var(--muted);font-size:12px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.card{padding:16px;min-width:0}.label{font-size:11px;color:var(--muted);font-weight:bold;text-transform:uppercase}
+.value{font-size:clamp(18px,2.5vw,26px);font-weight:800;margin-top:8px;overflow-wrap:anywhere}
+.note{font-size:11px;color:var(--muted);margin-top:4px}
+h2{font-size:16px;margin:0 0 12px}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:9px}
+table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left}
+th{background:#f8faf8;color:var(--muted);font-size:10px;text-transform:uppercase}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.total{font-weight:bold;background:#f4f8f5}
+.up{color:var(--green);font-weight:bold}.down{color:var(--red);font-weight:bold}
+.message{padding:12px;background:#fff8e6;border:1px solid #f0dfaa;border-radius:9px;margin:0 0 14px;color:#72530b}
+footer{max-width:1100px;margin:14px auto 30px;padding:0 16px;color:var(--muted);font-size:11px}
+@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}.status{width:100%;margin-left:0}}
+</style>
+</head>
+<body>
+<header><small>EIGER ADVENTURE · STORE 2077</small><h1>SALES GROWTH 2025 VS 2026</h1><p>Perbandingan sales bulanan · Eiger Pahlawan Sidoarjo</p></header>
+<main>
+<section class="toolbar">
+ <div class="field"><label>STATUS BILL</label><select id="status"><option value="valid">Delivered + Shipped</option><option value="delivered">Delivered saja</option><option value="all">Semua status</option></select></div>
+ <button id="refresh">↻ Sinkronkan Spreadsheet</button>
+ <div class="status" id="info">Menghubungkan ke Google Spreadsheet...</div>
+</section>
+<div id="warning" class="message" hidden></div>
+<section class="cards">
+ <div class="card"><div class="label">Total Sales 2025</div><div class="value" id="total25">-</div><div class="note" id="count25">Menunggu data</div></div>
+ <div class="card"><div class="label">Total Sales 2026</div><div class="value" id="total26">-</div><div class="note" id="count26">Menunggu data</div></div>
+ <div class="card"><div class="label">Selisih Sales</div><div class="value" id="difference">-</div><div class="note">2026 dikurangi 2025</div></div>
+ <div class="card"><div class="label">Growth 2026</div><div class="value" id="growth">-</div><div class="note">Dibandingkan periode yang sama</div></div>
+</section>
+<section class="card">
+ <h2>Tabel Perbandingan Sales per Bulan</h2>
+ <div class="table-wrap"><table>
+  <thead><tr><th>Bulan</th><th class="num">Sales 2025</th><th class="num">Sales 2026</th><th class="num">Selisih</th><th class="num">Growth</th></tr></thead>
+  <tbody id="rows"><tr><td colspan="5">Memuat data...</td></tr></tbody>
+ </table></div>
+ <p class="note">Growth = (Sales 2026 − Sales 2025) ÷ Sales 2025 × 100%. Jika sales 2025 = 0, growth ditampilkan sebagai —.</p>
+</section>
+</main>
+<footer>Data diambil dari Google Spreadsheet yang dipublikasikan. Dashboard memperbarui data setiap 60 detik. Pastikan spreadsheet memuat transaksi tahun 2025 dan 2026 dengan kolom Order Date, Net Amount, dan Bill Status.</footer>
+<script>
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vQqErtuNGODAWJjSPa76gemZ4sT9ZQ-nS1AtDoz4CMLF5rRKyUWuQv3qAQB4XyYfjyJs_wFbpTQwYEL/pub?gid=680094323&single=true&output=csv";
+const $=id=>document.getElementById(id);
+let sourceRows=[],lastCsv="",busy=false;
+const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const money=n=>'Rp '+Math.round(n).toLocaleString('id-ID');
+const clean=v=>String(v??'').replace(/^\uFEFF/,'').trim();
+const norm=v=>clean(v).toLowerCase().replace(/\s+/g,' ');
+function parseCSV(s){
+ const out=[];let row=[],cell='',q=false;
+ for(let i=0;i<s.length;i++){const c=s[i],n=s[i+1];
+  if(c==='"'&&q&&n==='"'){cell+='"';i++}else if(c==='"')q=!q;
+  else if(c===','&&!q){row.push(cell);cell=''}
+  else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);cell='';if(row.some(x=>clean(x)))out.push(row);row=[]}
+  else cell+=c;
+ }
+ if(cell!==''||row.length){row.push(cell);if(row.some(x=>clean(x)))out.push(row)}
+ return out;
+}
+function num(v){
+ if(typeof v==='number')return v;
+ let s=clean(v).replace(/[^\d,.\-]/g,'');if(!s)return 0;
+ const c=s.lastIndexOf(','),d=s.lastIndexOf('.');
+ if(c>-1&&d>-1)s=c>d?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+ else if(c>-1)s=s.length-c-1<=2?s.replace(',','.'):s.replace(/,/g,'');
+ const n=Number(s);return Number.isFinite(n)?n:0;
+}
+function date(v){
+ const s=clean(v);
+ let m=s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+ if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+ m=s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+ if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+ const d=new Date(s);return Number.isNaN(d.getTime())?null:d;
+}
+function setData(matrix){
+ const h=matrix.findIndex(r=>r.some(x=>norm(x)==='order date')&&r.some(x=>norm(x)==='net amount'));
+ if(h<0)throw Error('Kolom Order Date dan Net Amount tidak ditemukan.');
+ const headers=matrix[h].map(clean);
+ sourceRows=matrix.slice(h+1).filter(r=>r.some(x=>clean(x))).map(r=>{const o={};headers.forEach((k,i)=>o[k]=r[i]??'');return o})
+ .filter(r=>date(r['Order Date'])&&Number.isFinite(num(r['Net Amount'])));
+ render();
+}
+function render(){
+ const mode=$('status').value,totals={2025:Array(12).fill(0),2026:Array(12).fill(0)},counts={2025:0,2026:0};
+ for(const r of sourceRows){
+  const d=date(r['Order Date']);if(!d)continue;
+  const y=d.getFullYear(),m=d.getMonth();if(y!==2025&&y!==2026)continue;
+  const st=clean(r['Bill Status']).toLowerCase();
+  if(mode==='valid'&&!['delivered','shipped'].includes(st))continue;
+  if(mode==='delivered'&&st!=='delivered')continue;
+  totals[y][m]+=num(r['Net Amount']);counts[y]++;
+ }
+ const sum25=totals[2025].reduce((a,b)=>a+b,0),sum26=totals[2026].reduce((a,b)=>a+b,0);
+ const diff=sum26-sum25,growth=sum25?diff/sum25*100:null;
+ $('total25').textContent=money(sum25);$('total26').textContent=money(sum26);
+ $('difference').textContent=(diff>0?'+':'')+money(diff);
+ $('growth').textContent=growth===null?'—':(growth>0?'+':'')+growth.toFixed(2)+'%';
+ $('growth').className='value '+(growth===null?'':growth>=0?'up':'down');
+ $('count25').textContent=counts[2025].toLocaleString('id-ID')+' baris transaksi';$('count26').textContent=counts[2026].toLocaleString('id-ID')+' baris transaksi';
+ const body=months.map((name,i)=>{
+  const a=totals[2025][i],b=totals[2026][i],delta=b-a,pct=a?delta/a*100:null;
+  const p=pct===null?'—':(pct>0?'+':'')+pct.toFixed(2)+'%';
+  const cls=pct===null?'':pct>=0?'up':'down';
+  return '<tr><td>'+name+'</td><td class="num">'+(counts[2025]&&a?money(a):'—')+'</td><td class="num">'+(counts[2026]&&b?money(b):'—')+'</td><td class="num">'+(a||b?((delta>0?'+':'')+money(delta)):'—')+'</td><td class="num '+cls+'">'+p+'</td></tr>';
+ }).join('');
+ $('rows').innerHTML=body+'<tr class="total"><td>TOTAL JAN–DES</td><td class="num">'+money(sum25)+'</td><td class="num">'+money(sum26)+'</td><td class="num">'+(diff>0?'+':'')+money(diff)+'</td><td class="num '+(growth===null?'':growth>=0?'up':'down')+'">'+(growth===null?'—':(growth>0?'+':'')+growth.toFixed(2)+'%')+'</td></tr>';
+ const has25=counts[2025]>0,has26=counts[2026]>0;
+ $('warning').hidden=has25&&has26;
+ if(!has25||!has26)$('warning').textContent='Data belum lengkap untuk perbandingan: '+(!has25?'transaksi tahun 2025 belum ditemukan. ':'')+(!has26?'transaksi tahun 2026 belum ditemukan. ':'')+'Tambahkan kedua tahun ke tab Google Spreadsheet yang dipublikasikan. Nilai growth baru bermakna jika kedua tahun memiliki cakupan periode yang sama.';
+}
+async function sync(){
+ if(busy)return;busy=true;$('info').textContent='Sinkronisasi...';
+ try{
+  const res=await fetch(CSV_URL+(CSV_URL.includes('?')?'&':'?')+'_refresh='+Date.now(),{cache:'no-store'});
+  if(!res.ok)throw Error('HTTP '+res.status);
+  const csv=await res.text();if(!csv||csv.trim().startsWith('<'))throw Error('Respons bukan CSV publik.');
+  if(csv!==lastCsv){setData(parseCSV(csv));lastCsv=csv}
+  $('info').textContent='✓ Diperbarui '+new Date().toLocaleTimeString('id-ID')+' · '+sourceRows.length.toLocaleString('id-ID')+' baris';
+ }catch(e){$('info').textContent='Gagal sinkron: '+e.message}
+ finally{busy=false}
+}
+$('status').addEventListener('change',render);
+$('refresh').addEventListener('click',sync);
+sync();setInterval(sync,60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
+</script>
+</body></html>
