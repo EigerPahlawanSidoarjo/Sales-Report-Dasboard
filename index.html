@@ -36,11 +36,12 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 <header><div class="tag">EIGER ADVENTURE Â· STORE 2077</div><h1>SALES REPORT</h1><p>Eiger Pahlawan Sidoarjo</p></header>
 <main>
 <section class="toolbar">
- <div class="field"><label>UPLOAD FILE DSR EXCEL</label><input id="file" type="file" accept=".xlsx,.xls,.csv"></div>
+ <div class="field"><label>SUMBER DATA UTAMA</label><div style="padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#f8faf8">Google Spreadsheet · CSV otomatis</div></div>
  <div class="field"><label>BULAN LAPORAN</label><input id="month" type="month"></div>
  <div class="field"><label>STATUS BILL</label><select id="status"><option value="valid">Delivered + Shipped</option><option value="all">Semua status</option><option value="delivered">Delivered saja</option></select></div>
- <button id="refresh" class="secondary">Refresh Report</button>
- <div class="status" id="fileInfo">Silakan upload file Item DSR Report (.xlsx)</div>
+ <button id="refresh" class="secondary">↻ Sinkronkan Spreadsheet</button>
+ <div class="field"><label>UPLOAD EXCEL (OPSIONAL)</label><input id="file" type="file" accept=".xlsx,.xls,.csv"></div>
+ <div class="status" id="fileInfo">Menghubungkan ke Google Spreadsheet...</div>
 </section>
 <section class="kpis">
  <div class="card"><div class="kpi-label">Sales Hari Ini</div><div class="kpi-value" id="today">Rp 0</div><div class="kpi-note" id="todayNote">Tanggal berjalan</div></div>
@@ -58,70 +59,144 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 </section>
 <section class="card" style="margin-bottom:14px"><h2>Detail Ringkasan Kategori</h2><div class="table-wrap"><table><thead><tr><th>Category Lv.3</th><th>Category Lv.4</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Kontribusi</th></tr></thead><tbody id="categoryDetail"></tbody></table></div></section>
 </main>
-<footer>Basis nilai penjualan: kolom <b>Net Amount</b> dari file DSR. Baris data dikelompokkan berdasarkan Order Date. Pastikan file yang diunggah merupakan ekspor DSR untuk bulan yang ingin dianalisis.</footer>
+<footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard mengambil data terbaru saat halaman dibuka atau tombol sinkronisasi ditekan. Upload Excel hanya tersedia sebagai cadangan.</footer>
 <script>
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqErtuNGODAWJjSPa76gemZ4sT9ZQ-nS1AtDoz4CMLF5rRKyUWuQv3qAQB4XyYfjyJs_wFbpTQwYEL/pub?gid=680094323&single=true&output=csv";
 const $=id=>document.getElementById(id);
 let sourceRows=[];
 const rupiah=n=>'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');
 const number=n=>(Number(n)||0).toLocaleString('id-ID');
-const clean=v=>String(v??'').trim();
+const clean=v=>String(v??'').replace(/^\uFEFF/,'').trim();
+const norm=v=>clean(v).toLowerCase().replace(/\s+/g,' ');
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function parseNumber(v){
+ if(typeof v==='number')return v;
+ let s=clean(v).replace(/[^\d,.\-]/g,'');
+ if(!s)return 0;
+ const comma=s.lastIndexOf(','), dot=s.lastIndexOf('.');
+ if(comma>-1&&dot>-1){
+  s=comma>dot?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+ }else if(comma>-1){
+  const decimals=s.length-comma-1;
+  s=decimals>0&&decimals<=2?s.replace(',','.'):s.replace(/,/g,'');
+ }
+ const n=Number(s);return Number.isFinite(n)?n:0;
+}
 function parseDate(v){
- if(v instanceof Date&&!isNaN(v)) return v;
- if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);if(d)return new Date(d.y,d.m-1,d.d,d.H||0,d.M||0,d.S||0)}
- const d=new Date(v);return isNaN(d)?null:d;
+ if(v instanceof Date&&!isNaN(v))return v;
+ if(typeof v==='number'&&window.XLSX){const x=XLSX.SSF.parse_date_code(v);if(x)return new Date(x.y,x.m-1,x.d,x.H||0,x.M||0,x.S||0)}
+ const s=clean(v);
+ let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+ if(m)return new Date(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+ m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+ if(m)return new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+ const d=new Date(s);return isNaN(d)?null:d;
 }
 function keyDate(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
-function headerIndex(rows){return rows.findIndex(r=>r.some(x=>clean(x)==='Order Date')&&r.some(x=>clean(x)==='Net Amount'))}
-function loadWorkbook(buffer,name){
- const wb=XLSX.read(buffer,{type:'array',cellDates:true});
- const ws=wb.Sheets[wb.SheetNames[0]], rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
- const hi=headerIndex(rows);if(hi<0)throw Error('Header Order Date dan Net Amount tidak ditemukan.');
+function parseCSV(text){
+ text=String(text||'').replace(/^\uFEFF/,'');
+ const rows=[];let row=[],cell='',quoted=false;
+ for(let i=0;i<text.length;i++){
+  const c=text[i],next=text[i+1];
+  if(c==='"'&&quoted&&next==='"'){cell+='"';i++}
+  else if(c==='"'){quoted=!quoted}
+  else if(c===','&&!quoted){row.push(cell);cell=''}
+  else if((c==='\n'||c==='\r')&&!quoted){
+   if(c==='\r'&&next==='\n')i++;
+   row.push(cell);cell='';
+   if(row.some(x=>clean(x)!==''))rows.push(row);
+   row=[];
+  }else cell+=c;
+ }
+ if(cell!==''||row.length){row.push(cell);if(row.some(x=>clean(x)!==''))rows.push(row)}
+ return rows;
+}
+function headerIndex(rows){
+ return rows.findIndex(r=>r.some(x=>norm(x)==='order date')&&r.some(x=>norm(x)==='net amount'));
+}
+function loadRows(rows,name){
+ const hi=headerIndex(rows);
+ if(hi<0)throw Error('Header "Order Date" dan "Net Amount" tidak ditemukan. Periksa tab CSV yang dipublikasikan.');
  const headers=rows[hi].map(clean);
- sourceRows=rows.slice(hi+1).filter(r=>r.some(x=>clean(x)!=='')).map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]);return o}).filter(o=>o['Order No']&&o['Order Date']);
- $('fileInfo').textContent=`${name} Â· ${number(sourceRows.length)} baris transaksi`;
+ sourceRows=rows.slice(hi+1).filter(r=>r.some(x=>clean(x)!=='')).map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]??'');return o})
+  .filter(o=>parseDate(o['Order Date'])&&(clean(o['Order No'])||clean(o['Invoice No'])||clean(o['Net Amount'])));
+ if(!sourceRows.length)throw Error('Header ditemukan, tetapi baris data transaksi tidak terbaca.');
+ $('fileInfo').textContent=name+' · '+number(sourceRows.length)+' baris · berhasil dimuat';
  const dates=sourceRows.map(r=>parseDate(r['Order Date'])).filter(Boolean).sort((a,b)=>a-b);
- if(dates.length){const d=dates[dates.length-1];$('month').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+ if(dates.length){const d=dates[dates.length-1];$('month').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
  render();
 }
+async function loadPublishedCsv(){
+ $('fileInfo').textContent='Mengambil data terbaru dari Google Spreadsheet...';
+ try{
+  const response=await fetch(CSV_URL+'&_refresh='+Date.now(),{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const csv=await response.text();
+  if(!csv||csv.trim().startsWith('<'))throw Error('Google tidak mengembalikan CSV. Pastikan tab sudah dipublikasikan ke web.');
+  loadRows(parseCSV(csv),'Google Spreadsheet · sinkron otomatis');
+ }catch(err){
+  $('fileInfo').textContent='Gagal sinkron: '+err.message+' · Coba refresh atau upload Excel';
+  console.error('Gagal mengambil CSV DSR:',err);
+ }
+}
+function loadWorkbook(buffer,name){
+ const wb=XLSX.read(buffer,{type:'array',cellDates:true});
+ const ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+ loadRows(rows,name+' · upload manual');
+}
 function aggregate(rows,keyField,valueField='Net Amount'){
- const m=new Map();rows.forEach(r=>{const k=clean(r[keyField])||'(Tidak diisi)';m.set(k,(m.get(k)||0)+(Number(r[valueField])||0))});return [...m].sort((a,b)=>b[1]-a[1]);
+ const m=new Map();rows.forEach(r=>{const k=clean(r[keyField])||'(Tidak diisi)';m.set(k,(m.get(k)||0)+parseNumber(r[valueField]))});
+ return [...m].sort((a,b)=>b[1]-a[1]);
 }
 function renderBars(id,items){
- const total=items.reduce((s,x)=>s+x[1],0);
- $(id).innerHTML=items.length?items.slice(0,10).map(([name,val],i)=>`<div class="bar-row"><div title="${name.replaceAll('"','&quot;')}">${i+1}. ${name}</div><div class="bar-bg"><div class="bar" style="width:${total?val/Math.max(...items.map(x=>x[1]))*100:0}%"></div></div><b>${rupiah(val)}</b></div>`).join(''):'<div class="empty">Belum ada data</div>';
+ const max=items.length?Math.max(...items.map(x=>x[1])):0;
+ $(id).innerHTML=items.length?items.slice(0,10).map(([name,val],i)=>'<div class="bar-row"><div title="'+esc(name)+'">'+(i+1)+'. '+esc(name)+'</div><div class="bar-bg"><div class="bar" style="width:'+(max?val/max*100:0)+'%"></div></div><b>'+rupiah(val)+'</b></div>').join(''):'<div class="empty">Belum ada data</div>';
 }
 function render(){
  if(!sourceRows.length)return;
- const month=$('month').value, [yy,mm]=month.split('-').map(Number);
- const today=new Date(), currentKey=keyDate(today);
- const mode=$('status').value;
+ const month=$('month').value;if(!month)return;
+ const [yy,mm]=month.split('-').map(Number);
+ const today=new Date(),currentKey=keyDate(today),mode=$('status').value;
  const rows=sourceRows.filter(r=>{
   const d=parseDate(r['Order Date']);if(!d||d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;
   const s=clean(r['Bill Status']).toLowerCase();
   if(mode==='valid'&&!['delivered','shipped'].includes(s))return false;
   if(mode==='delivered'&&s!=='delivered')return false;
   return true;
- }).map(r=>({...r,_date:parseDate(r['Order Date']),_net:Number(r['Net Amount'])||0,_qty:Number(r['Quantity'])||0}));
+ }).map(r=>({...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:parseNumber(r['Quantity'])}));
  const daily=new Map();rows.forEach(r=>{const k=keyDate(r._date);daily.set(k,(daily.get(k)||0)+r._net)});
- const lastDay=month===`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`?today.getDate():new Date(yy,mm,0).getDate();
- let cumulative=0, dailyHtml='';
+ const lastDay=month===today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')?today.getDate():new Date(yy,mm,0).getDate();
+ let cumulative=0,dailyHtml='';
  for(let day=1;day<=lastDay;day++){
-  const k=`${yy}-${String(mm).padStart(2,'0')}-${String(day).padStart(2,'0')}`,v=daily.get(k)||0;cumulative+=v;
-  dailyHtml+=`<tr><td>${String(day).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yy}</td><td class="num">${rupiah(v)}</td><td class="num"><b>${rupiah(cumulative)}</b></td></tr>`;
+  const k=yy+'-'+String(mm).padStart(2,'0')+'-'+String(day).padStart(2,'0'),v=daily.get(k)||0;cumulative+=v;
+  dailyHtml+='<tr><td>'+String(day).padStart(2,'0')+'/'+String(mm).padStart(2,'0')+'/'+yy+'</td><td class="num">'+rupiah(v)+'</td><td class="num"><b>'+rupiah(cumulative)+'</b></td></tr>';
  }
  $('daily').innerHTML=dailyHtml||'<tr><td colspan="3" class="empty">Tidak ada data</td></tr>';
  const mtd=rows.reduce((s,r)=>s+r._net,0),todaySales=rows.filter(r=>keyDate(r._date)===currentKey).reduce((s,r)=>s+r._net,0);
- const invoices=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])));
+ const invoices=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])).filter(Boolean));
  $('today').textContent=rupiah(todaySales);$('mtd').textContent=rupiah(mtd);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);
- $('todayNote').textContent=`${today.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`;
- $('mtdNote').textContent=`${number(rows.length)} baris item Â· ${month}`;
+ $('todayNote').textContent=today.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+ $('mtdNote').textContent=number(rows.length)+' baris item · '+month;
  const people=aggregate(rows,'Sales Person');
- $('people').innerHTML=people.map(([name,val],i)=>{const subset=rows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===name);return `<tr><td>${i+1}</td><td>${name}</td><td class="num"><b>${rupiah(val)}</b></td><td class="num">${number(subset.reduce((s,r)=>s+r._qty,0))}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
- const c3=aggregate(rows,'Category Lv.3'),c4=aggregate(rows,'Category Lv.4');renderBars('cat3',c3);renderBars('cat4',c4);
- const detail=new Map();rows.forEach(r=>{const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x)});
- $('categoryDetail').innerHTML=[...detail.values()].sort((a,b)=>b.sales-a.sales).map(x=>`<tr><td>${x.a}</td><td>${x.b}</td><td class="num">${number(x.qty)}</td><td class="num"><b>${rupiah(x.sales)}</b></td><td class="num">${mtd?(x.sales/mtd*100).toFixed(1):'0.0'}%</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Tidak ada data</td></tr>';
+ $('people').innerHTML=people.map(([name,val],i)=>{
+  const subset=rows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===name);
+  return '<tr><td>'+(i+1)+'</td><td>'+esc(name)+'</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
+ }).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
+ renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
+ const detail=new Map();rows.forEach(r=>{
+  const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;
+  const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x);
+ });
+ $('categoryDetail').innerHTML=[...detail.values()].sort((a,b)=>b.sales-a.sales).map(x=>'<tr><td>'+esc(x.a)+'</td><td>'+esc(x.b)+'</td><td class="num">'+number(x.qty)+'</td><td class="num"><b>'+rupiah(x.sales)+'</b></td><td class="num">'+(mtd?(x.sales/mtd*100).toFixed(1):'0.0')+'%</td></tr>').join('')||'<tr><td colspan="5" class="empty">Tidak ada data</td></tr>';
 }
-$('file').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{loadWorkbook(await f.arrayBuffer(),f.name)}catch(err){alert('Gagal membaca file: '+err.message)}});
-$('month').addEventListener('change',render);$('status').addEventListener('change',render);$('refresh').addEventListener('click',render);
+$('file').addEventListener('change',async e=>{
+ const f=e.target.files[0];if(!f)return;
+ try{const ext=f.name.toLowerCase();if(ext.endsWith('.csv'))loadRows(parseCSV(await f.text()),f.name);else loadWorkbook(await f.arrayBuffer(),f.name)}
+ catch(err){alert('Gagal membaca file: '+err.message)}
+});
+$('month').addEventListener('change',render);
+$('status').addEventListener('change',render);
+$('refresh').addEventListener('click',loadPublishedCsv);
+loadPublishedCsv();
 </script>
 </body></html>
