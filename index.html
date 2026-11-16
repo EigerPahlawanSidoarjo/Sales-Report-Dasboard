@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EIGER Pahlawan Sidoarjo | Sales Report</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#17211c;--muted:#68756e;--line:#e3e9e5;--green:#176b45;--green2:#e8f3ed}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Arial, sans-serif}
+header{background:#14251d;color:white;padding:22px max(18px,calc((100% - 1200px)/2))}
+header .tag{font-size:11px;letter-spacing:2px;color:#b8d5c4}h1{margin:5px 0;font-size:24px}header p{margin:0;color:#c9d8cf}
+main{max-width:1200px;margin:22px auto;padding:0 16px}
+.toolbar,.card{background:var(--card);border:1px solid var(--line);border-radius:13px}
+.toolbar{padding:14px;display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:16px}
+.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:11px;color:var(--muted);font-weight:bold}
+input,select,button{font:inherit;border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:white;color:var(--ink)}
+button{background:var(--green);color:white;border:0;font-weight:bold;cursor:pointer}button.secondary{background:#edf2ee;color:var(--ink);border:1px solid var(--line)}
+.status{margin-left:auto;color:var(--muted);font-size:12px;max-width:100%}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.card{padding:16px;min-width:0}.kpi-label{font-size:11px;color:var(--muted);font-weight:bold;text-transform:uppercase;letter-spacing:.5px}
+.kpi-value{font-size:clamp(19px,2.5vw,27px);font-weight:800;margin-top:8px;overflow-wrap:anywhere}.kpi-note{font-size:11px;color:var(--muted);margin-top:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 12px}.sub{font-size:11px;color:var(--muted);font-weight:normal}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-size:10px;text-transform:uppercase;background:#f8faf8;position:sticky;top:0}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.table-wrap{overflow:auto;max-height:390px;border:1px solid var(--line);border-radius:9px}
+.bar-row{display:grid;grid-template-columns:minmax(85px,1fr) 2fr auto;gap:9px;align-items:center;margin:10px 0;font-size:12px}
+.bar-bg{height:9px;background:#edf1ee;border-radius:20px;overflow:hidden}.bar{height:100%;background:var(--green);border-radius:20px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.upload{display:inline-flex;align-items:center;gap:8px}
+footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);font-size:11px}
+@media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.status{margin-left:0;width:100%}}
+@media(max-width:420px){h1{font-size:20px}.kpi-value{font-size:18px}}
+</style>
+</head>
+<body>
+<header><div class="tag">EIGER ADVENTURE Â· STORE 2077</div><h1>SALES REPORT</h1><p>Eiger Pahlawan Sidoarjo</p></header>
+<main>
+<section class="toolbar">
+ <div class="field"><label>UPLOAD FILE DSR EXCEL</label><input id="file" type="file" accept=".xlsx,.xls,.csv"></div>
+ <div class="field"><label>BULAN LAPORAN</label><input id="month" type="month"></div>
+ <div class="field"><label>STATUS BILL</label><select id="status"><option value="valid">Delivered + Shipped</option><option value="all">Semua status</option><option value="delivered">Delivered saja</option></select></div>
+ <button id="refresh" class="secondary">Refresh Report</button>
+ <div class="status" id="fileInfo">Silakan upload file Item DSR Report (.xlsx)</div>
+</section>
+<section class="kpis">
+ <div class="card"><div class="kpi-label">Sales Hari Ini</div><div class="kpi-value" id="today">Rp 0</div><div class="kpi-note" id="todayNote">Tanggal berjalan</div></div>
+ <div class="card"><div class="kpi-label">Sales Kumulatif (MTD)</div><div class="kpi-value" id="mtd">Rp 0</div><div class="kpi-note" id="mtdNote">Tanggal 1 sampai hari berjalan</div></div>
+ <div class="card"><div class="kpi-label">Total Transaksi</div><div class="kpi-value" id="trx">0</div><div class="kpi-note">Nomor invoice/order unik</div></div>
+ <div class="card"><div class="kpi-label">Rata-rata per Transaksi</div><div class="kpi-value" id="avg">Rp 0</div><div class="kpi-note">Sales kumulatif Ã· transaksi</div></div>
+</section>
+<section class="grid2">
+ <div class="card"><h2>Rekap Sales per Hari <span class="sub">Â· harian dan kumulatif</span></h2><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th class="num">Sales Harian</th><th class="num">Sales Kumulatif</th></tr></thead><tbody id="daily"></tbody></table></div></div>
+ <div class="card"><h2>Sales Person <span class="sub">Â· berdasarkan Net Amount</span></h2><div class="table-wrap"><table><thead><tr><th>#</th><th>Sales Person</th><th class="num">Sales</th><th class="num">Qty</th></tr></thead><tbody id="people"></tbody></table></div></div>
+</section>
+<section class="grid2">
+ <div class="card"><h2>Best Sales Category Lv.3</h2><div id="cat3"></div></div>
+ <div class="card"><h2>Best Sales Category Lv.4</h2><div id="cat4"></div></div>
+</section>
+<section class="card" style="margin-bottom:14px"><h2>Detail Ringkasan Kategori</h2><div class="table-wrap"><table><thead><tr><th>Category Lv.3</th><th>Category Lv.4</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Kontribusi</th></tr></thead><tbody id="categoryDetail"></tbody></table></div></section>
+</main>
+<footer>Basis nilai penjualan: kolom <b>Net Amount</b> dari file DSR. Baris data dikelompokkan berdasarkan Order Date. Pastikan file yang diunggah merupakan ekspor DSR untuk bulan yang ingin dianalisis.</footer>
+<script>
+const $=id=>document.getElementById(id);
+let sourceRows=[];
+const rupiah=n=>'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');
+const number=n=>(Number(n)||0).toLocaleString('id-ID');
+const clean=v=>String(v??'').trim();
+function parseDate(v){
+ if(v instanceof Date&&!isNaN(v)) return v;
+ if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);if(d)return new Date(d.y,d.m-1,d.d,d.H||0,d.M||0,d.S||0)}
+ const d=new Date(v);return isNaN(d)?null:d;
+}
+function keyDate(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+function headerIndex(rows){return rows.findIndex(r=>r.some(x=>clean(x)==='Order Date')&&r.some(x=>clean(x)==='Net Amount'))}
+function loadWorkbook(buffer,name){
+ const wb=XLSX.read(buffer,{type:'array',cellDates:true});
+ const ws=wb.Sheets[wb.SheetNames[0]], rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+ const hi=headerIndex(rows);if(hi<0)throw Error('Header Order Date dan Net Amount tidak ditemukan.');
+ const headers=rows[hi].map(clean);
+ sourceRows=rows.slice(hi+1).filter(r=>r.some(x=>clean(x)!=='')).map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]);return o}).filter(o=>o['Order No']&&o['Order Date']);
+ $('fileInfo').textContent=`${name} Â· ${number(sourceRows.length)} baris transaksi`;
+ const dates=sourceRows.map(r=>parseDate(r['Order Date'])).filter(Boolean).sort((a,b)=>a-b);
+ if(dates.length){const d=dates[dates.length-1];$('month').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+ render();
+}
+function aggregate(rows,keyField,valueField='Net Amount'){
+ const m=new Map();rows.forEach(r=>{const k=clean(r[keyField])||'(Tidak diisi)';m.set(k,(m.get(k)||0)+(Number(r[valueField])||0))});return [...m].sort((a,b)=>b[1]-a[1]);
+}
+function renderBars(id,items){
+ const total=items.reduce((s,x)=>s+x[1],0);
+ $(id).innerHTML=items.length?items.slice(0,10).map(([name,val],i)=>`<div class="bar-row"><div title="${name.replaceAll('"','&quot;')}">${i+1}. ${name}</div><div class="bar-bg"><div class="bar" style="width:${total?val/Math.max(...items.map(x=>x[1]))*100:0}%"></div></div><b>${rupiah(val)}</b></div>`).join(''):'<div class="empty">Belum ada data</div>';
+}
+function render(){
+ if(!sourceRows.length)return;
+ const month=$('month').value, [yy,mm]=month.split('-').map(Number);
+ const today=new Date(), currentKey=keyDate(today);
+ const mode=$('status').value;
+ const rows=sourceRows.filter(r=>{
+  const d=parseDate(r['Order Date']);if(!d||d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;
+  const s=clean(r['Bill Status']).toLowerCase();
+  if(mode==='valid'&&!['delivered','shipped'].includes(s))return false;
+  if(mode==='delivered'&&s!=='delivered')return false;
+  return true;
+ }).map(r=>({...r,_date:parseDate(r['Order Date']),_net:Number(r['Net Amount'])||0,_qty:Number(r['Quantity'])||0}));
+ const daily=new Map();rows.forEach(r=>{const k=keyDate(r._date);daily.set(k,(daily.get(k)||0)+r._net)});
+ const lastDay=month===`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`?today.getDate():new Date(yy,mm,0).getDate();
+ let cumulative=0, dailyHtml='';
+ for(let day=1;day<=lastDay;day++){
+  const k=`${yy}-${String(mm).padStart(2,'0')}-${String(day).padStart(2,'0')}`,v=daily.get(k)||0;cumulative+=v;
+  dailyHtml+=`<tr><td>${String(day).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yy}</td><td class="num">${rupiah(v)}</td><td class="num"><b>${rupiah(cumulative)}</b></td></tr>`;
+ }
+ $('daily').innerHTML=dailyHtml||'<tr><td colspan="3" class="empty">Tidak ada data</td></tr>';
+ const mtd=rows.reduce((s,r)=>s+r._net,0),todaySales=rows.filter(r=>keyDate(r._date)===currentKey).reduce((s,r)=>s+r._net,0);
+ const invoices=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])));
+ $('today').textContent=rupiah(todaySales);$('mtd').textContent=rupiah(mtd);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);
+ $('todayNote').textContent=`${today.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`;
+ $('mtdNote').textContent=`${number(rows.length)} baris item Â· ${month}`;
+ const people=aggregate(rows,'Sales Person');
+ $('people').innerHTML=people.map(([name,val],i)=>{const subset=rows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===name);return `<tr><td>${i+1}</td><td>${name}</td><td class="num"><b>${rupiah(val)}</b></td><td class="num">${number(subset.reduce((s,r)=>s+r._qty,0))}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
+ const c3=aggregate(rows,'Category Lv.3'),c4=aggregate(rows,'Category Lv.4');renderBars('cat3',c3);renderBars('cat4',c4);
+ const detail=new Map();rows.forEach(r=>{const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x)});
+ $('categoryDetail').innerHTML=[...detail.values()].sort((a,b)=>b.sales-a.sales).map(x=>`<tr><td>${x.a}</td><td>${x.b}</td><td class="num">${number(x.qty)}</td><td class="num"><b>${rupiah(x.sales)}</b></td><td class="num">${mtd?(x.sales/mtd*100).toFixed(1):'0.0'}%</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Tidak ada data</td></tr>';
+}
+$('file').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{loadWorkbook(await f.arrayBuffer(),f.name)}catch(err){alert('Gagal membaca file: '+err.message)}});
+$('month').addEventListener('change',render);$('status').addEventListener('change',render);$('refresh').addEventListener('click',render);
+</script>
+</body></html>
