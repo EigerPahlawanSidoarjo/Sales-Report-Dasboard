@@ -26,6 +26,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px 8px;b
 .bar-row{display:grid;grid-template-columns:minmax(85px,1fr) 2fr auto;gap:9px;align-items:center;margin:10px 0;font-size:12px}
 .bar-bg{height:9px;background:#edf1ee;border-radius:20px;overflow:hidden}.bar{height:100%;background:var(--green);border-radius:20px}
 .empty{padding:28px;text-align:center;color:var(--muted)}
+.customer-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.customer-tools input{min-width:220px}.customer-summary{font-size:12px;color:var(--muted);margin-left:auto}
 .upload{display:inline-flex;align-items:center;gap:8px}
 footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);font-size:11px}
 @media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.status{margin-left:0;width:100%}}
@@ -58,6 +59,11 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  <div class="card"><h2>Best Sales Category Lv.4</h2><div id="cat4"></div></div>
 </section>
 <section class="card" style="margin-bottom:14px"><h2>Detail Ringkasan Kategori</h2><div class="table-wrap"><table><thead><tr><th>Category Lv.3</th><th>Category Lv.4</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Kontribusi</th></tr></thead><tbody id="categoryDetail"></tbody></table></div></section>
+<section class="card" style="margin-bottom:14px">
+ <h2>Rekap Customer <span class="sub">· jumlah transaksi dan total value</span></h2>
+ <div class="customer-tools"><input id="customerSearch" type="search" placeholder="Cari nama customer..."><div class="customer-summary" id="customerSummary">0 customer</div></div>
+ <div class="table-wrap"><table><thead><tr><th>#</th><th>Customer Name</th><th class="num">Jumlah Transaksi</th><th class="num">Total Value</th></tr></thead><tbody id="customerTable"></tbody></table></div>
+</section>
 </main>
 <footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
 <script>
@@ -165,6 +171,23 @@ function renderBars(id,items){
  const max=items.length?Math.max(...items.map(x=>x[1])):0;
  $(id).innerHTML=items.length?items.slice(0,10).map(([name,val],i)=>'<div class="bar-row"><div title="'+esc(name)+'">'+(i+1)+'. '+esc(name)+'</div><div class="bar-bg"><div class="bar" style="width:'+(max?val/max*100:0)+'%"></div></div><b>'+rupiah(val)+'</b></div>').join(''):'<div class="empty">Belum ada data</div>';
 }
+function renderCustomers(rows){
+ const customers=new Map();
+ rows.forEach(r=>{
+  const name=clean(r['Customer Name'])||'(Nama customer kosong)';
+  const transaction=clean(r['Invoice No'])||clean(r['Order No']);
+  const item=customers.get(name)||{transactions:new Set(),value:0};
+  if(transaction)item.transactions.add(transaction);
+  item.value+=r._net;
+  customers.set(name,item);
+ });
+ const sorted=[...customers.entries()].map(([name,x])=>({name,count:x.transactions.size,value:x.value}))
+  .sort((a,b)=>b.value-a.value);
+ $('customerSummary').textContent=number(sorted.length)+' customer · '+number(sorted.reduce((s,x)=>s+x.count,0))+' transaksi';
+ const q=norm($('customerSearch').value);
+ const filtered=sorted.filter(x=>norm(x.name).includes(q));
+ $('customerTable').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num">'+number(x.count)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td></tr>').join('')||'<tr><td colspan="4" class="empty">Customer tidak ditemukan</td></tr>';
+}
 function render(){
  if(!sourceRows.length)return;
  const month=$('month').value;if(!month)return;
@@ -196,6 +219,7 @@ function render(){
   return '<tr><td>'+(i+1)+'</td><td>'+esc(name)+'</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
  }).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
  renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
+ renderCustomers(rows);
  const detail=new Map();rows.forEach(r=>{
   const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;
   const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x);
@@ -214,6 +238,7 @@ $('file').addEventListener('change',async e=>{
 $('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
 $('month').addEventListener('change',render);
 $('status').addEventListener('change',render);
+$('customerSearch').addEventListener('input',()=>renderCustomers(sourceRows.filter(r=>{const d=parseDate(r['Order Date']);if(!d)return false;const [yy,mm]=$('month').value.split('-').map(Number);if(d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;const s=clean(r['Bill Status']).toLowerCase(),mode=$('status').value;return mode==='all'||(mode==='delivered'?s==='delivered':['delivered','shipped'].includes(s));}).map(r=>({...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:parseNumber(r['Quantity'])}))));
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
 setInterval(()=>loadPublishedCsv(true),AUTO_SYNC_MS);
