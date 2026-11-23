@@ -70,6 +70,7 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqErtuNGODAWJjSPa76gemZ4sT9ZQ-nS1AtDoz4CMLF5rRKyUWuQv3qAQB4XyYfjyJs_wFbpTQwYEL/pub?gid=680094323&single=true&output=csv";
 const $=id=>document.getElementById(id);
 let sourceRows=[];
+let visibleRows=[];
 let lastCsvText='';
 let isManualUpload=false;
 let syncInProgress=false;
@@ -200,6 +201,7 @@ function render(){
   if(mode==='delivered'&&s!=='delivered')return false;
   return true;
  }).map(r=>({...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:parseNumber(r['Quantity'])}));
+ visibleRows=rows;
  const daily=new Map();rows.forEach(r=>{const k=keyDate(r._date);daily.set(k,(daily.get(k)||0)+r._net)});
  const lastDay=month===today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')?today.getDate():new Date(yy,mm,0).getDate();
  let cumulative=0,dailyHtml='';
@@ -238,7 +240,7 @@ $('file').addEventListener('change',async e=>{
 $('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
 $('month').addEventListener('change',render);
 $('status').addEventListener('change',render);
-$('customerSearch').addEventListener('input',()=>renderCustomers(sourceRows.filter(r=>{const d=parseDate(r['Order Date']);if(!d)return false;const [yy,mm]=$('month').value.split('-').map(Number);if(d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;const s=clean(r['Bill Status']).toLowerCase(),mode=$('status').value;return mode==='all'||(mode==='delivered'?s==='delivered':['delivered','shipped'].includes(s));}).map(r=>({...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:parseNumber(r['Quantity'])}))));
+$('customerSearch').addEventListener('input',()=>renderCustomers(visibleRows));
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
 setInterval(()=>loadPublishedCsv(true),AUTO_SYNC_MS);
