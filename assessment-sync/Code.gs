@@ -6,12 +6,12 @@
  * Deploy as Web App, execute as the spreadsheet owner, access:
  * "Anyone with a Google account" (recommended where available).
  */
+const ASSESSMENT_SPREADSHEET_ID = '1ViIjtWB2b4MzfJ6HqgWweE1DNMkrrxiBpa2p0Izr3PU';
 const ASSESSMENT_SHEET_NAME = 'AssessmentData';
 const ASSESSMENT_HEADERS = ['ID', 'Record JSON', 'Synced At'];
 
 function assessmentSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('Script harus dibuat dari Extensions > Apps Script pada spreadsheet tujuan.');
+  const ss = SpreadsheetApp.openById(ASSESSMENT_SPREADSHEET_ID);
   let sheet = ss.getSheetByName(ASSESSMENT_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(ASSESSMENT_SHEET_NAME);
