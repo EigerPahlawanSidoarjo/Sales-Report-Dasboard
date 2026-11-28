@@ -137,8 +137,9 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
    </div>
    <div class="card" style="margin:12px 0;background:#f8faf8">
     <h3 style="font-size:13px;margin:0 0 8px">Sinkronisasi Multi-Device</h3>
-    <p class="kpi-note">Masukkan URL Web App Google Apps Script yang sama di setiap perangkat. Setelah tersambung, hasil assessment dapat dikirim dan ditarik dari spreadsheet bersama.</p>
-    <div class="field"><label>URL GOOGLE APPS SCRIPT WEB APP</label><input id="assessmentSyncUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <p class="kpi-note">Tujuan penyimpanan bersama sudah diarahkan ke spreadsheet Self Assessment Eiger 2077. Buka spreadsheet di bawah, lalu deploy backend Apps Script sebagai Web App satu kali. URL Web App yang sama harus digunakan pada setiap perangkat.</p>
+    <p style="font-size:12px;margin:8px 0"><a href="https://docs.google.com/spreadsheets/d/1ViIjtWB2b4MzfJ6HqgWweE1DNMkrrxiBpa2p0Izr3PU/edit?gid=0#gid=0" target="_blank" rel="noopener">📊 Buka Spreadsheet Self Assessment Eiger 2077</a></p>
+    <div class="field"><label>URL GOOGLE APPS SCRIPT WEB APP (DEPLOYMENT /EXEC)</label><input id="assessmentSyncUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="assessmentSaveSyncUrl">Simpan URL & Sinkronkan</button><button type="button" class="secondary" id="assessmentSyncNow">Sinkronkan Data</button></div>
     <div id="assessmentSyncStatus" class="kpi-note" style="margin-top:8px">Belum tersambung ke penyimpanan bersama.</div>
    </div>
