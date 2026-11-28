@@ -257,7 +257,7 @@ function render(){
  const today=new Date(),currentKey=keyDate(today),mode=$('status').value;
  const baseRows=sourceRows.filter(r=>{
   // Exclude seluruh transaksi Paperbag dari semua KPI, ranking, kategori, dan detail.
-  const isPaperbag=Object.values(r).some(value=>/paper\\s*bag/i.test(clean(value)));
+  const isPaperbag=Object.values(r).some(value=>/paper\s*bag/i.test(clean(value)));
   if(isPaperbag)return false;
   const d=parseDate(r['Order Date']);if(!d||d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;
   const st=clean(r['Bill Status']).toLowerCase();
