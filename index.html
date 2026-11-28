@@ -88,6 +88,45 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  <p class="kpi-note" style="margin-top:10px">Kontribusi = sales konsumen ÷ total sales pada filter.</p>
 </section>
 </main>
+
+<section class="card" id="assessmentSection" style="margin:0 0 14px">
+ <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+  <div><h2>Form Self Assessment · Sales & Team Performance</h2><div class="sub">Evaluasi individu Sales Person · isi secara jujur untuk kebutuhan coaching dan pengembangan</div></div>
+  <button type="button" class="secondary" id="assessmentToggle">Buka Form Evaluasi</button>
+ </div>
+ <div id="assessmentPanel" hidden style="margin-top:16px">
+  <div class="card" style="background:#f8faf8;margin-bottom:14px">
+   <h2>Verifikasi Sales Person</h2>
+   <div class="grid2" style="margin-bottom:0">
+    <div class="field"><label>NAMA SALES PERSON</label><select id="assessmentName"><option value="">Pilih nama Sales Person</option></select></div>
+    <div class="field"><label>PASSWORD</label><input id="assessmentPassword" type="password" autocomplete="off" placeholder="Masukkan password"></div>
+   </div>
+   <p class="kpi-note">Password adalah kata terakhir dari nama Anda. Contoh: BAGAS JR → JR. Password tidak membedakan huruf besar/kecil.</p>
+   <button type="button" id="assessmentLogin" style="margin-top:8px">Verifikasi & Mulai Mengisi</button>
+   <span id="assessmentAuthMessage" class="kpi-note" style="margin-left:10px"></span>
+  </div>
+  <form id="assessmentForm" hidden>
+   <div class="card" style="margin-bottom:14px">
+    <h2 id="assessmentWelcome">Evaluasi Individu</h2>
+    <div class="field"><label>PERIODE EVALUASI</label><input id="assessmentPeriod" type="month" required></div>
+    <p class="kpi-note">Gunakan skala berikut untuk seluruh pertanyaan penilaian: 1 = Sangat Kurang · 2 = Kurang · 3 = Cukup · 4 = Baik · 5 = Sangat Baik.</p>
+   </div>
+   <div id="assessmentQuestions"></div>
+   <div class="card" style="margin-bottom:14px">
+    <h2>Konfirmasi & Komitmen</h2>
+    <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="assessmentConfirm" required style="margin-top:3px"> Saya menyatakan jawaban yang saya isi sesuai dengan kondisi dan evaluasi diri saya yang sebenarnya.</label>
+    <button type="submit" style="margin-top:14px">Kirim Self Assessment</button>
+    <span id="assessmentSubmitMessage" class="kpi-note" style="margin-left:10px"></span>
+   </div>
+  </form>
+ </div>
+ <div class="card" style="margin-top:14px">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2>Rekap Self Assessment Tersimpan</h2><button type="button" class="secondary" id="assessmentExport">Export CSV</button></div>
+  <div class="table-wrap"><table><thead><tr><th>Waktu Submit</th><th>Periode</th><th>Sales Person</th><th class="num">Rata-rata Nilai</th><th>Status</th></tr></thead><tbody id="assessmentRecords"><tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr></tbody></table></div>
+  <p class="kpi-note" style="margin-top:9px">Catatan: jawaban saat ini disimpan di browser/perangkat yang digunakan. Gunakan Export CSV untuk mengunduh rekap dan memindahkannya ke penyimpanan bersama.</p>
+ </div>
+</section>
+
 <footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
 <script>
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqErtuNGODAWJjSPa76gemZ4sT9ZQ-nS1AtDoz4CMLF5rRKyUWuQv3qAQB4XyYfjyJs_wFbpTQwYEL/pub?output=csv";
@@ -334,6 +373,125 @@ $('clearSalesFilter').addEventListener('click',()=>{selectedSalesPerson='';$('sa
 $('month').addEventListener('change',render);
 $('status').addEventListener('change',render);
 $('customerSearch').addEventListener('input',render);
+
+
+const ASSESSMENT_STORAGE_KEY='eiger2077_sales_team_assessments_v1';
+const assessmentGroups=[
+ {title:'B. Sales Achievement · Pencapaian Penjualan',items:[
+  ['Apakah Anda mengetahui target sales pribadi selama periode ini?','rating'],
+  ['Seberapa besar pencapaian sales pribadi Anda terhadap target?','rating'],
+  ['Apakah Anda konsisten mencapai target sales harian?','rating'],
+  ['Seberapa aktif Anda menawarkan produk tambahan kepada customer?','rating'],
+  ['Seberapa baik kemampuan Anda melakukan upselling dan cross-selling?','rating'],
+  ['Apakah Anda mampu meningkatkan nilai transaksi (ATV)?','rating'],
+  ['Apakah Anda mampu meningkatkan jumlah item dalam satu transaksi (UPT)?','rating'],
+  ['Seberapa efektif Anda mengubah pengunjung menjadi pembeli?','rating'],
+  ['Apa faktor utama yang mendukung pencapaian sales Anda?','text'],
+  ['Apa kendala terbesar yang membuat target sales belum tercapai?','text'],
+  ['Strategi apa yang akan Anda lakukan untuk meningkatkan sales bulan berikutnya?','text']
+ ]},
+ {title:'C. Selling Skill & Customer Service',items:[
+  ['Apakah Anda selalu melakukan greeting kepada customer?','rating'],
+  ['Apakah Anda mampu menggali kebutuhan customer sebelum menawarkan produk?','rating'],
+  ['Apakah Anda mampu memberikan rekomendasi produk yang sesuai kebutuhan?','rating'],
+  ['Apakah Anda mampu menangani keberatan customer terhadap harga atau produk?','rating'],
+  ['Seberapa percaya diri Anda dalam melakukan closing?','rating'],
+  ['Apakah Anda memberikan pelayanan yang ramah dan profesional?','rating'],
+  ['Apakah Anda mampu menangani komplain customer dengan baik?','rating'],
+  ['Apa kelebihan utama Anda dalam melayani customer?','text'],
+  ['Bagian selling skill apa yang masih perlu Anda tingkatkan?','text']
+ ]},
+ {title:'D. Product Knowledge',items:[
+  ['Seberapa baik pemahaman Anda terhadap kategori Apparel, Footwear, Equipment, Headwear, dan Accessories?','rating'],
+  ['Apakah Anda memahami keunggulan dan fungsi produk yang dijual?','rating'],
+  ['Apakah Anda mampu menjelaskan material dan teknologi produk kepada customer?','rating'],
+  ['Apakah Anda mampu membandingkan beberapa produk untuk membantu customer memilih?','rating'],
+  ['Apakah Anda rutin mempelajari produk baru dan promo yang sedang berjalan?','rating'],
+  ['Kategori produk apa yang paling Anda kuasai?','text'],
+  ['Kategori produk apa yang paling perlu Anda pelajari?','text']
+ ]},
+ {title:'E. Teamwork & Operational Performance',items:[
+  ['Apakah Anda aktif membantu rekan kerja ketika toko ramai?','rating'],
+  ['Apakah Anda mampu bekerja sama dengan seluruh anggota tim?','rating'],
+  ['Apakah Anda menjalankan tanggung jawab sesuai pembagian tugas?','rating'],
+  ['Apakah Anda menjaga kerapian display dan kebersihan area toko?','rating'],
+  ['Apakah Anda menjalankan SOP toko dengan konsisten?','rating'],
+  ['Apakah Anda disiplin terhadap jam kerja dan tanggung jawab?','rating'],
+  ['Apakah Anda memiliki inisiatif tanpa harus selalu diarahkan Leader?','rating'],
+  ['Apakah Anda aktif memberikan kontribusi untuk mencapai target toko?','rating']
+ ]},
+ {title:'F. Self Evaluation · Evaluasi Diri',items:[
+  ['Apa pencapaian terbesar Anda selama periode ini?','text'],
+  ['Apa kekurangan yang paling Anda rasakan dalam pekerjaan?','text'],
+  ['Apa kebiasaan kerja yang ingin Anda perbaiki?','text'],
+  ['Apa kontribusi yang sudah Anda berikan untuk tim?','text'],
+  ['Apa yang akan Anda lakukan agar performa bulan depan lebih baik?','text'],
+  ['Dukungan apa yang Anda butuhkan dari Store Leader?','text']
+ ]},
+ {title:'G. Target & Personal Commitment',items:[
+  ['Berapa target sales pribadi yang ingin Anda capai bulan depan?','text'],
+  ['Apa strategi konkret untuk mencapai target tersebut?','text'],
+  ['Berapa target transaksi atau item tambahan yang ingin Anda tingkatkan?','text'],
+  ['Kemampuan apa yang ingin Anda kembangkan?','text'],
+  ['Apa komitmen Anda untuk meningkatkan performa tim toko?','text']
+ ]}
+];
+let authenticatedAssessmentName='';
+function assessmentRecords(){try{return JSON.parse(localStorage.getItem(ASSESSMENT_STORAGE_KEY)||'[]')}catch(e){return []}}
+function saveAssessmentRecords(rows){localStorage.setItem(ASSESSMENT_STORAGE_KEY,JSON.stringify(rows))}
+function renderAssessmentNames(){
+ const names=[...new Set(sourceRows.map(r=>clean(r['Sales Person'])).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
+ const select=$('assessmentName'),previous=select.value;
+ select.innerHTML='<option value="">Pilih nama Sales Person</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+ if(names.includes(previous))select.value=previous;
+}
+function renderAssessmentQuestions(){
+ let index=0;
+ $('assessmentQuestions').innerHTML=assessmentGroups.map(group=>'<div class="card" style="margin-bottom:14px"><h2>'+esc(group.title)+'</h2>'+group.items.map(([question,type])=>{
+  const id='assessmentQ'+index++;
+  return '<div style="padding:11px 0;border-bottom:1px solid var(--line)"><label for="'+id+'" style="display:block;font-weight:bold;margin-bottom:7px">'+esc(question)+(type==='rating'?' <span class="sub">· Skala 1–5</span>':'')+'</label>'+(type==='rating'?'<select id="'+id+'" data-assessment-type="rating" data-question="'+esc(question)+'" required style="width:100%"><option value="">Pilih nilai</option><option value="1">1 · Sangat Kurang</option><option value="2">2 · Kurang</option><option value="3">3 · Cukup</option><option value="4">4 · Baik</option><option value="5">5 · Sangat Baik</option></select>':'<textarea id="'+id+'" data-assessment-type="text" data-question="'+esc(question)+'" required rows="2" style="width:100%;resize:vertical" placeholder="Tulis jawaban Anda..."></textarea>')+'</div>';
+ }).join('')+'</div>').join('');
+}
+function renderAssessmentRecords(){
+ const rows=assessmentRecords();
+ $('assessmentRecords').innerHTML=rows.length?rows.slice().reverse().map(r=>'<tr><td>'+esc(new Date(r.submittedAt).toLocaleString('id-ID'))+'</td><td>'+esc(r.period)+'</td><td>'+esc(r.name)+'</td><td class="num"><b>'+Number(r.average||0).toFixed(2)+'</b></td><td><span style="color:var(--green);font-weight:bold">Tersimpan</span></td></tr>').join(''):'<tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr>';
+}
+$('assessmentToggle').addEventListener('click',()=>{$('assessmentPanel').hidden=!$('assessmentPanel').hidden;$('assessmentToggle').textContent=$('assessmentPanel').hidden?'Buka Form Evaluasi':'Tutup Form Evaluasi';if(!$('assessmentPanel').hidden)renderAssessmentNames()});
+$('assessmentLogin').addEventListener('click',()=>{
+ const name=$('assessmentName').value,password=$('assessmentPassword').value.trim();
+ if(!name){$('assessmentAuthMessage').textContent='Pilih nama Sales Person terlebih dahulu.';return}
+ const lastWord=name.trim().split(/\s+/).pop();
+ if(password.toLocaleLowerCase('id-ID')!==lastWord.toLocaleLowerCase('id-ID')){$('assessmentAuthMessage').textContent='Password tidak sesuai. Periksa kata terakhir nama Anda.';$('assessmentForm').hidden=true;return}
+ authenticatedAssessmentName=name;
+ $('assessmentWelcome').textContent='Self Assessment: '+name;
+ $('assessmentPeriod').value=$('month').value||new Date().toISOString().slice(0,7);
+ $('assessmentForm').hidden=false;
+ $('assessmentAuthMessage').textContent='Verifikasi berhasil. Silakan isi seluruh pertanyaan.';
+ renderAssessmentQuestions();
+});
+$('assessmentForm').addEventListener('submit',e=>{
+ e.preventDefault();
+ if(!authenticatedAssessmentName){$('assessmentSubmitMessage').textContent='Silakan verifikasi nama dan password terlebih dahulu.';return}
+ const fields=[...$('assessmentQuestions').querySelectorAll('[data-assessment-type]')];
+ const ratings=fields.filter(x=>x.dataset.assessmentType==='rating').map(x=>Number(x.value));
+ if(fields.some(x=>!x.value.trim())){$('assessmentSubmitMessage').textContent='Lengkapi seluruh pertanyaan sebelum mengirim.';return}
+ const answers=fields.map(x=>({question:x.dataset.question,type:x.dataset.assessmentType,answer:x.value.trim()}));
+ const record={submittedAt:new Date().toISOString(),name:authenticatedAssessmentName,period:$('assessmentPeriod').value,average:ratings.reduce((a,b)=>a+b,0)/(ratings.length||1),answers};
+ const all=assessmentRecords();all.push(record);saveAssessmentRecords(all);
+ $('assessmentForm').reset();$('assessmentPeriod').value=$('month').value||new Date().toISOString().slice(0,7);
+ $('assessmentForm').hidden=true;$('assessmentPassword').value='';authenticatedAssessmentName='';
+ $('assessmentAuthMessage').textContent='';$('assessmentSubmitMessage').textContent='Assessment berhasil disimpan di browser ini.';
+ renderAssessmentRecords();
+});
+$('assessmentExport').addEventListener('click',()=>{
+ const rows=assessmentRecords();if(!rows.length){alert('Belum ada assessment untuk diekspor.');return}
+ const csvCell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+ const lines=[['Waktu Submit','Periode','Sales Person','Rata-rata Nilai','Pertanyaan','Jenis','Jawaban'].map(csvCell).join(',')];
+ rows.forEach(r=>r.answers.forEach(a=>lines.push([r.submittedAt,r.period,r.name,r.average.toFixed(2),a.question,a.type,a.answer].map(csvCell).join(','))));
+ const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='EIGER2077_Self_Assessment.csv';a.click();URL.revokeObjectURL(url);
+});
+renderAssessmentRecords();
 
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
