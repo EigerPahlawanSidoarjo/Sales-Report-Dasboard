@@ -108,7 +108,7 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
   <form id="assessmentForm" hidden>
    <div class="card" style="margin-bottom:14px">
     <h2 id="assessmentWelcome">Evaluasi Individu</h2>
-    <div class="field"><label>PERIODE EVALUASI</label><input id="assessmentPeriod" type="month" required></div>
+    <div class="grid2" style="margin-bottom:0"><div class="field"><label>PERIODE EVALUASI</label><input id="assessmentPeriod" type="month" required></div><div class="field"><label>WEEK PENGISIAN</label><select id="assessmentWeek" required><option value="">Pilih Week</option><option value="Week 1">Week 1</option><option value="Week 3">Week 3</option></select></div></div>
     <p class="kpi-note">Gunakan skala berikut untuk seluruh pertanyaan penilaian: 1 = Sangat Kurang · 2 = Kurang · 3 = Cukup · 4 = Baik · 5 = Sangat Baik.</p>
    </div>
    <div id="assessmentQuestions"></div>
@@ -122,7 +122,7 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  </div>
  <div class="card" style="margin-top:14px">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2>Rekap Self Assessment Tersimpan</h2><button type="button" class="secondary" id="assessmentExport">Export CSV</button></div>
-  <div class="table-wrap"><table><thead><tr><th>Waktu Submit</th><th>Periode</th><th>Sales Person</th><th class="num">Rata-rata Nilai</th><th>Status</th></tr></thead><tbody id="assessmentRecords"><tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr></tbody></table></div>
+  <div class="table-wrap"><table><thead><tr><th>Waktu Submit</th><th>Periode</th><th>Week</th><th>Sales Person</th><th class="num">Rata-rata Nilai</th><th>Status</th></tr></thead><tbody id="assessmentRecords"><tr><td colspan="6" class="empty">Belum ada assessment tersimpan di browser ini</td></tr></tbody></table></div>
   <p class="kpi-note" style="margin-top:9px">Catatan: jawaban saat ini disimpan di browser/perangkat yang digunakan. Gunakan Export CSV untuk mengunduh rekap dan memindahkannya ke penyimpanan bersama.</p>
  </div>
 </section>
@@ -454,7 +454,7 @@ function renderAssessmentQuestions(){
 }
 function renderAssessmentRecords(){
  const rows=assessmentRecords();
- $('assessmentRecords').innerHTML=rows.length?rows.slice().reverse().map(r=>'<tr><td>'+esc(new Date(r.submittedAt).toLocaleString('id-ID'))+'</td><td>'+esc(r.period)+'</td><td>'+esc(r.name)+'</td><td class="num"><b>'+Number(r.average||0).toFixed(2)+'</b></td><td><span style="color:var(--green);font-weight:bold">Tersimpan</span></td></tr>').join(''):'<tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr>';
+ $('assessmentRecords').innerHTML=rows.length?rows.slice().reverse().map(r=>'<tr><td>'+esc(new Date(r.submittedAt).toLocaleString('id-ID'))+'</td><td>'+esc(r.period)+'</td><td>'+esc(r.week||'-')+'</td><td>'+esc(r.name)+'</td><td class="num"><b>'+Number(r.average||0).toFixed(2)+'</b></td><td><span style="color:var(--green);font-weight:bold">Tersimpan</span></td></tr>').join(''):'<tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr>';
 }
 $('assessmentToggle').addEventListener('click',()=>{$('assessmentPanel').hidden=!$('assessmentPanel').hidden;$('assessmentToggle').textContent=$('assessmentPanel').hidden?'Buka Form Evaluasi':'Tutup Form Evaluasi';if(!$('assessmentPanel').hidden)renderAssessmentNames()});
 $('assessmentLogin').addEventListener('click',()=>{
@@ -476,7 +476,7 @@ $('assessmentForm').addEventListener('submit',e=>{
  const ratings=fields.filter(x=>x.dataset.assessmentType==='rating').map(x=>Number(x.value));
  if(fields.some(x=>!x.value.trim())){$('assessmentSubmitMessage').textContent='Lengkapi seluruh pertanyaan sebelum mengirim.';return}
  const answers=fields.map(x=>({question:x.dataset.question,type:x.dataset.assessmentType,answer:x.value.trim()}));
- const record={submittedAt:new Date().toISOString(),name:authenticatedAssessmentName,period:$('assessmentPeriod').value,average:ratings.reduce((a,b)=>a+b,0)/(ratings.length||1),answers};
+ const record={submittedAt:new Date().toISOString(),name:authenticatedAssessmentName,period:$('assessmentPeriod').value,week:$('assessmentWeek').value,average:ratings.reduce((a,b)=>a+b,0)/(ratings.length||1),answers};
  const all=assessmentRecords();all.push(record);saveAssessmentRecords(all);
  $('assessmentForm').reset();$('assessmentPeriod').value=$('month').value||new Date().toISOString().slice(0,7);
  $('assessmentForm').hidden=true;$('assessmentPassword').value='';authenticatedAssessmentName='';
@@ -486,8 +486,8 @@ $('assessmentForm').addEventListener('submit',e=>{
 $('assessmentExport').addEventListener('click',()=>{
  const rows=assessmentRecords();if(!rows.length){alert('Belum ada assessment untuk diekspor.');return}
  const csvCell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
- const lines=[['Waktu Submit','Periode','Sales Person','Rata-rata Nilai','Pertanyaan','Jenis','Jawaban'].map(csvCell).join(',')];
- rows.forEach(r=>r.answers.forEach(a=>lines.push([r.submittedAt,r.period,r.name,r.average.toFixed(2),a.question,a.type,a.answer].map(csvCell).join(','))));
+ const lines=[['Waktu Submit','Periode','Week','Sales Person','Rata-rata Nilai','Pertanyaan','Jenis','Jawaban'].map(csvCell).join(',')];
+ rows.forEach(r=>r.answers.forEach(a=>lines.push([r.submittedAt,r.period,r.week||'-',r.name,r.average.toFixed(2),a.question,a.type,a.answer].map(csvCell).join(','))));
  const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='EIGER2077_Self_Assessment.csv';a.click();URL.revokeObjectURL(url);
 });
