@@ -135,7 +135,13 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
     <div class="field" style="max-width:420px"><label>PILIH SALES PERSON</label><select id="assessmentReportPerson"><option value="">Pilih individu dari hasil assessment</option></select></div>
     <div id="assessmentIndividualReport" style="margin-top:14px"><div class="empty">Pilih Sales Person untuk melihat bagan hasil, problem utama, dan rekomendasi action.</div></div>
    </div>
-   <p class="kpi-note" style="margin-top:9px">Catatan: jawaban saat ini disimpan di browser/perangkat yang digunakan. Gunakan Export CSV untuk mengunduh rekap dan memindahkannya ke penyimpanan bersama.</p>
+   <div class="card" style="margin:12px 0;background:#f8faf8">
+    <h3 style="font-size:13px;margin:0 0 8px">Sinkronisasi Multi-Device</h3>
+    <p class="kpi-note">Masukkan URL Web App Google Apps Script yang sama di setiap perangkat. Setelah tersambung, hasil assessment dapat dikirim dan ditarik dari spreadsheet bersama.</p>
+    <div class="field"><label>URL GOOGLE APPS SCRIPT WEB APP</label><input id="assessmentSyncUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="assessmentSaveSyncUrl">Simpan URL & Sinkronkan</button><button type="button" class="secondary" id="assessmentSyncNow">Sinkronkan Data</button></div>
+    <div id="assessmentSyncStatus" class="kpi-note" style="margin-top:8px">Belum tersambung ke penyimpanan bersama.</div>
+   </div>
    <button type="button" class="secondary" id="assessmentRecapLock" style="margin-top:8px">Kunci Kembali Rekap</button>
   </div>
  </div>>
@@ -390,6 +396,53 @@ $('customerSearch').addEventListener('input',render);
 
 
 const ASSESSMENT_STORAGE_KEY='eiger2077_sales_team_assessments_v1';
+const ASSESSMENT_SYNC_URL_KEY='eiger2077_assessment_sync_url_v1';
+function assessmentSyncUrl(){return localStorage.getItem(ASSESSMENT_SYNC_URL_KEY)||''}
+function assessmentRecordId(r){return r.id||[r.name,r.period,r.week||'',r.submittedAt].join('|')}
+function normalizeAssessmentRecord(r){return {...r,id:assessmentRecordId(r)}}
+function mergeAssessmentRows(a,b){
+ const map=new Map();
+ [...a,...b].forEach(raw=>{const r=normalizeAssessmentRecord(raw);map.set(r.id,r)});
+ return [...map.values()].sort((x,y)=>new Date(x.submittedAt)-new Date(y.submittedAt));
+}
+function setAssessmentSyncStatus(msg,isError=false){const el=$('assessmentSyncStatus');if(el){el.textContent=msg;el.style.color=isError?'#b45309':''}}
+function assessmentJsonp(url){
+ return new Promise((resolve,reject)=>{
+  const callback='assessmentSyncCb'+Date.now()+Math.floor(Math.random()*10000);
+  const script=document.createElement('script');
+  const timer=setTimeout(()=>{cleanup();reject(new Error('Waktu tunggu habis. Periksa URL deployment dan akses Web App.'))},20000);
+  function cleanup(){clearTimeout(timer);delete window[callback];script.remove()}
+  window[callback]=data=>{cleanup();resolve(data)};
+  script.onerror=()=>{cleanup();reject(new Error('Tidak dapat membaca data cloud. Pastikan URL Web App benar dan deployment aktif.'))};
+  script.src=url+(url.includes('?')?'&':'?')+'action=read&callback='+callback+'&t='+Date.now();
+  document.head.appendChild(script);
+ });
+}
+async function pushAssessmentRows(rows){
+ const url=assessmentSyncUrl();if(!url)throw new Error('URL Web App belum diatur.');
+ const payload=rows.map(normalizeAssessmentRecord);
+ await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'append',records:payload})});
+}
+async function syncAssessmentData(pushLocal=true){
+ const url=assessmentSyncUrl();if(!url){setAssessmentSyncStatus('URL Web App belum diatur. Isi URL deployment Apps Script terlebih dahulu.',true);return}
+ setAssessmentSyncStatus('Menghubungkan dan mengambil data dari spreadsheet…');
+ try{
+  let local=assessmentRecords().map(normalizeAssessmentRecord);
+  if(pushLocal&&local.length)await pushAssessmentRows(local);
+  const result=await assessmentJsonp(url);
+  if(!result||result.ok!==true||!Array.isArray(result.records))throw new Error(result&&result.error?result.error:'Respons cloud tidak valid.');
+  const merged=mergeAssessmentRows(local,result.records);
+  saveAssessmentRecords(merged);
+  const cloudIds=new Set(result.records.map(assessmentRecordId));
+  const missing=merged.filter(r=>!cloudIds.has(r.id));
+  if(missing.length){await pushAssessmentRows(missing);setAssessmentSyncStatus('Sinkronisasi selesai. '+merged.length+' hasil tersedia; '+missing.length+' hasil baru dikirim ke cloud.');}
+  else setAssessmentSyncStatus('Sinkronisasi selesai. '+merged.length+' hasil assessment tersedia dari penyimpanan bersama.');
+  renderAssessmentRecords();
+  const names=[...new Set(merged.map(r=>r.name))].sort((a,b)=>a.localeCompare(b,'id'));
+  if($('assessmentReportPerson')){const selected=$('assessmentReportPerson').value;$('assessmentReportPerson').innerHTML='<option value="">Pilih individu dari hasil assessment</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');if(names.includes(selected))$('assessmentReportPerson').value=selected;}
+  if($('assessmentReportPerson')&&$('assessmentReportPerson').value)renderIndividualAssessmentReport();
+ }catch(err){setAssessmentSyncStatus('Sinkronisasi gagal: '+err.message,true)}
+}
 const assessmentGroups=[
  {title:'B. Sales Achievement · Pencapaian Penjualan',items:[
   ['Apakah Anda mengetahui target sales pribadi selama periode ini?','rating'],
@@ -605,12 +658,14 @@ $('assessmentForm').addEventListener('submit',e=>{
  const ratings=fields.filter(x=>x.dataset.assessmentType==='rating').map(x=>Number(x.value));
  if(fields.some(x=>!x.value.trim())){$('assessmentSubmitMessage').textContent='Lengkapi seluruh pertanyaan sebelum mengirim.';return}
  const answers=fields.map(x=>({question:x.dataset.question,type:x.dataset.assessmentType,answer:x.value.trim()}));
- const record={submittedAt:new Date().toISOString(),name:authenticatedAssessmentName,period:$('assessmentPeriod').value,week:$('assessmentWeek').value,average:ratings.reduce((a,b)=>a+b,0)/(ratings.length||1),answers};
- const all=assessmentRecords();all.push(record);saveAssessmentRecords(all);
+ const record={submittedAt:new Date().toISOString(),name:authenticatedAssessmentName,period:$('assessmentPeriod').value,week:$('assessmentWeek').value,average:ratings.reduce((a,b)=>a+b,0)/(ratings.length||1),answers};record.id=assessmentRecordId(record);
+ const all=mergeAssessmentRows(assessmentRecords(),[record]);saveAssessmentRecords(all);
  $('assessmentForm').reset();$('assessmentPeriod').value=$('month').value||new Date().toISOString().slice(0,7);
  $('assessmentForm').hidden=true;$('assessmentPassword').value='';authenticatedAssessmentName='';
- $('assessmentAuthMessage').textContent='';$('assessmentSubmitMessage').textContent='Assessment berhasil disimpan di browser ini.';
+ $('assessmentAuthMessage').textContent='';$('assessmentSubmitMessage').textContent='Assessment tersimpan di perangkat. Mengirim ke penyimpanan bersama…';
  renderAssessmentRecords();
+ if(assessmentSyncUrl()){pushAssessmentRows([record]).then(()=>syncAssessmentData(false)).catch(err=>setAssessmentSyncStatus('Data tersimpan lokal, tetapi pengiriman cloud gagal: '+err.message,true));}
+ else setAssessmentSyncStatus('Data tersimpan lokal. Atur URL Web App untuk mengirim hasil ke semua perangkat.',true);
 });
 $('assessmentExport').addEventListener('click',()=>{
  const rows=assessmentRecords();if(!rows.length){alert('Belum ada assessment untuk diekspor.');return}
@@ -621,6 +676,11 @@ $('assessmentExport').addEventListener('click',()=>{
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='EIGER2077_Self_Assessment.csv';a.click();URL.revokeObjectURL(url);
 });
 renderAssessmentRecords();
+$('assessmentSyncUrl').value=assessmentSyncUrl();
+$('assessmentSaveSyncUrl').addEventListener('click',()=>{const url=$('assessmentSyncUrl').value.trim();if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:[?#].*)?$/.test(url)){setAssessmentSyncStatus('URL tidak valid. Gunakan URL deployment Apps Script yang berakhiran /exec.',true);return}localStorage.setItem(ASSESSMENT_SYNC_URL_KEY,url);syncAssessmentData(true);});
+$('assessmentSyncNow').addEventListener('click',()=>syncAssessmentData(true));
+$('assessmentRecapUnlock').addEventListener('click',()=>{if(!$('assessmentRecapContent').hidden)syncAssessmentData(true)});
+$('assessmentToggle').addEventListener('click',()=>{if(!$('assessmentPanel').hidden&&assessmentSyncUrl())syncAssessmentData(false)});
 
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
