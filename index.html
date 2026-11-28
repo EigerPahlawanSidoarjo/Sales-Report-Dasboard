@@ -53,6 +53,7 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  <div class="card"><div class="kpi-label">Sales Hari Ini</div><div class="kpi-value" id="today">Rp 0</div><div class="kpi-note" id="todayNote">Tanggal berjalan</div></div>
  <div class="card"><div class="kpi-label">Total Transaksi</div><div class="kpi-value" id="trx">0</div><div class="kpi-note">Nomor invoice/order unik</div></div>
  <div class="card"><div class="kpi-label">Rata-rata per Transaksi</div><div class="kpi-value" id="avg">Rp 0</div><div class="kpi-note">Total sales ÷ transaksi</div></div>
+ <div class="card"><div class="kpi-label">UPT (Unit per Transaction)</div><div class="kpi-value" id="upt">0.00</div><div class="kpi-note">Total Qty ÷ total transaksi</div></div>
  <div class="card"><div class="kpi-label">Sales Kumulatif MTD</div><div class="kpi-value" id="mtdSales">Rp 0</div><div class="kpi-note" id="mtdNote">Akumulasi sales bulan berjalan</div></div>
  <div class="card"><div class="kpi-label">Target Bulan Ini</div><div class="kpi-value" id="monthlyTarget">Rp 970.000.000</div><div class="target-track"><div class="target-fill" id="targetProgressBar"></div></div><div class="kpi-note" id="targetProgressText">0% tercapai · Sisa Rp 970.000.000</div></div>
 </section>
@@ -279,7 +280,7 @@ function render(){
  $('daily').innerHTML=dailyHtml||'<tr><td colspan="2" class="empty">Tidak ada data</td></tr>';
  const mtd=rows.reduce((s,r)=>s+r._net,0),overallMtd=baseRows.reduce((s,r)=>s+r._net,0),todaySales=rows.filter(r=>keyDate(r._date)===currentKey).reduce((s,r)=>s+r._net,0);
  const invoices=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])).filter(Boolean));
- $('today').textContent=rupiah(todaySales);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);
+ $('today').textContent=rupiah(todaySales);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);const totalQty=rows.reduce((s,r)=>s+r._qty,0);$('upt').textContent=(invoices.size?totalQty/invoices.size:0).toFixed(2);
  const monthlyTarget=970000000;
  const targetPct=mtd/monthlyTarget*100;
  const targetRemaining=Math.max(0,monthlyTarget-mtd);
@@ -299,9 +300,9 @@ function render(){
   $('salesDetail').hidden=false;
   $('salesDetailTitle').textContent='Pencapaian Sales: '+selectedSalesPerson;
   $('salesDetailNote').textContent='Data mengikuti filter bulan dan status transaksi yang sedang dipilih.';
-  const ps=rows.reduce((a,r)=>a+r._net,0),pq=rows.reduce((a,r)=>a+r._qty,0),mtdContribution=overallMtd?ps/overallMtd*100:0;
+  const ps=rows.reduce((a,r)=>a+r._net,0),pq=rows.reduce((a,r)=>a+r._qty,0),mtdContribution=overallMtd?ps/overallMtd*100:0,salesPersonUpt=pi.size?pq/pi.size:0;
   const pi=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])).filter(Boolean));
-  $('salesPersonKpis').innerHTML='<div class="card"><div class="kpi-label">Total Sales MTD Sales Person</div><div class="kpi-value">'+rupiah(ps)+'</div></div><div class="card"><div class="kpi-label">Qty Terjual</div><div class="kpi-value">'+number(pq)+'</div></div><div class="card"><div class="kpi-label">Jumlah Transaksi</div><div class="kpi-value">'+number(pi.size)+'</div></div><div class="card"><div class="kpi-label">Kontribusi ke Total MTD Store</div><div class="kpi-value">'+mtdContribution.toFixed(2)+'%</div><div class="kpi-note">'+rupiah(ps)+' dari '+rupiah(overallMtd)+'</div></div>';
+  $('salesPersonKpis').innerHTML='<div class="card"><div class="kpi-label">Total Sales MTD Sales Person</div><div class="kpi-value">'+rupiah(ps)+'</div></div><div class="card"><div class="kpi-label">Qty Terjual</div><div class="kpi-value">'+number(pq)+'</div></div><div class="card"><div class="kpi-label">Jumlah Transaksi</div><div class="kpi-value">'+number(pi.size)+'</div></div><div class="card"><div class="kpi-label">UPT Sales Person</div><div class="kpi-value">'+salesPersonUpt.toFixed(2)+'</div><div class="kpi-note">'+number(pq)+' Qty ÷ '+number(pi.size)+' transaksi</div></div><div class="card"><div class="kpi-label">Kontribusi ke Total MTD Store</div><div class="kpi-value">'+mtdContribution.toFixed(2)+'%</div><div class="kpi-note">'+rupiah(ps)+' dari '+rupiah(overallMtd)+'</div></div>';
   $('salesTransactions').innerHTML=rows.slice().sort((a,b)=>b._date-a._date).map(r=>'<tr><td>'+r._date.toLocaleDateString('id-ID')+'</td><td>'+esc(r['Invoice No']||r['Order No']||'-')+'</td><td>'+esc(r['Product Name']||r['SKU Name']||r['Item Name']||r['Article Name']||'-')+'</td><td>'+esc(r['Category Lv.3']||'-')+'</td><td>'+esc(r['Category Lv.4']||'-')+'</td><td class="num">'+number(r._qty)+'</td><td class="num"><b>'+rupiah(r._net)+'</b></td></tr>').join('')||'<tr><td colspan="7" class="empty">Tidak ada transaksi</td></tr>';
  }else{$('salesDetail').hidden=true;}
  renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
