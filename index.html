@@ -121,10 +121,19 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
   </form>
  </div>
  <div class="card" style="margin-top:14px">
-  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2>Rekap Self Assessment Tersimpan</h2><button type="button" class="secondary" id="assessmentExport">Export CSV</button></div>
-  <div class="table-wrap"><table><thead><tr><th>Waktu Submit</th><th>Periode</th><th>Week</th><th>Sales Person</th><th class="num">Rata-rata Nilai</th><th>Status</th></tr></thead><tbody id="assessmentRecords"><tr><td colspan="6" class="empty">Belum ada assessment tersimpan di browser ini</td></tr></tbody></table></div>
-  <p class="kpi-note" style="margin-top:9px">Catatan: jawaban saat ini disimpan di browser/perangkat yang digunakan. Gunakan Export CSV untuk mengunduh rekap dan memindahkannya ke penyimpanan bersama.</p>
- </div>
+  <h2>Rekap Self Assessment Tersimpan</h2>
+  <div id="assessmentRecapLogin">
+   <div class="field" style="max-width:360px"><label>PASSWORD AKSES REKAP</label><input id="assessmentRecapPassword" type="password" autocomplete="off" placeholder="Masukkan password akses rekap"></div>
+   <button type="button" id="assessmentRecapUnlock" style="margin-top:9px">Masuk ke Rekap</button>
+   <span id="assessmentRecapMessage" class="kpi-note" style="margin-left:10px"></span>
+  </div>
+  <div id="assessmentRecapContent" hidden>
+   <div style="display:flex;justify-content:flex-end;margin:10px 0"><button type="button" class="secondary" id="assessmentExport">Export CSV</button></div>
+   <div class="table-wrap"><table><thead><tr><th>Waktu Submit</th><th>Periode</th><th>Week</th><th>Sales Person</th><th class="num">Rata-rata Nilai</th><th>Status</th></tr></thead><tbody id="assessmentRecords"><tr><td colspan="6" class="empty">Belum ada assessment tersimpan di browser ini</td></tr></tbody></table></div>
+   <p class="kpi-note" style="margin-top:9px">Catatan: jawaban saat ini disimpan di browser/perangkat yang digunakan. Gunakan Export CSV untuk mengunduh rekap dan memindahkannya ke penyimpanan bersama.</p>
+   <button type="button" class="secondary" id="assessmentRecapLock" style="margin-top:8px">Kunci Kembali Rekap</button>
+  </div>
+ </div>>
 </section>
 
 <footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
@@ -456,6 +465,25 @@ function renderAssessmentRecords(){
  const rows=assessmentRecords();
  $('assessmentRecords').innerHTML=rows.length?rows.slice().reverse().map(r=>'<tr><td>'+esc(new Date(r.submittedAt).toLocaleString('id-ID'))+'</td><td>'+esc(r.period)+'</td><td>'+esc(r.week||'-')+'</td><td>'+esc(r.name)+'</td><td class="num"><b>'+Number(r.average||0).toFixed(2)+'</b></td><td><span style="color:var(--green);font-weight:bold">Tersimpan</span></td></tr>').join(''):'<tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr>';
 }
+
+const ASSESSMENT_RECAP_PASSWORD='110496';
+$('assessmentRecapUnlock').addEventListener('click',function(){
+ if($('assessmentRecapPassword').value.trim()!==ASSESSMENT_RECAP_PASSWORD){
+  $('assessmentRecapMessage').textContent='Password salah. Silakan coba kembali.';
+  $('assessmentRecapContent').hidden=true;return;
+ }
+ $('assessmentRecapContent').hidden=false;
+ $('assessmentRecapLogin').hidden=true;
+ $('assessmentRecapPassword').value='';
+ $('assessmentRecapMessage').textContent='';
+ renderAssessmentRecords();
+});
+$('assessmentRecapPassword').addEventListener('keydown',function(e){if(e.key==='Enter')$('assessmentRecapUnlock').click()});
+$('assessmentRecapLock').addEventListener('click',function(){
+ $('assessmentRecapContent').hidden=true;
+ $('assessmentRecapLogin').hidden=false;
+ $('assessmentRecapMessage').textContent='';
+});
 $('assessmentToggle').addEventListener('click',()=>{$('assessmentPanel').hidden=!$('assessmentPanel').hidden;$('assessmentToggle').textContent=$('assessmentPanel').hidden?'Buka Form Evaluasi':'Tutup Form Evaluasi';if(!$('assessmentPanel').hidden)renderAssessmentNames()});
 $('assessmentLogin').addEventListener('click',()=>{
  const name=$('assessmentName').value,password=$('assessmentPassword').value.trim();
