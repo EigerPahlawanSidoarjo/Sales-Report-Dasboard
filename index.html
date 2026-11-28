@@ -398,7 +398,9 @@ $('customerSearch').addEventListener('input',render);
 
 const ASSESSMENT_STORAGE_KEY='eiger2077_sales_team_assessments_v1';
 const ASSESSMENT_SYNC_URL_KEY='eiger2077_assessment_sync_url_v1';
-function assessmentSyncUrl(){return localStorage.getItem(ASSESSMENT_SYNC_URL_KEY)||''}
+// Isi URL deployment /exec ini satu kali setelah Apps Script selesai di-deploy; berlaku untuk semua perangkat.
+const ASSESSMENT_SYNC_URL_DEFAULT='';
+function assessmentSyncUrl(){return ASSESSMENT_SYNC_URL_DEFAULT||localStorage.getItem(ASSESSMENT_SYNC_URL_KEY)||''}
 function assessmentRecordId(r){return r.id||[r.name,r.period,r.week||'',r.submittedAt].join('|')}
 function normalizeAssessmentRecord(r){return {...r,id:assessmentRecordId(r)}}
 function mergeAssessmentRows(a,b){
@@ -628,6 +630,8 @@ $('assessmentRecapUnlock').addEventListener('click',function(){
  $('assessmentRecapPassword').value='';
  $('assessmentRecapMessage').textContent='';
  renderAssessmentRecords();
+ // Saat rekap dibuka, ambil data cloud sehingga rekap tidak bergantung pada browser yang mengisi.
+ if(assessmentSyncUrl())syncAssessmentData(false);
  const names=[...new Set(assessmentRecords().map(r=>r.name))].sort((a,b)=>a.localeCompare(b,'id'));
  $('assessmentReportPerson').innerHTML='<option value="">Pilih individu dari hasil assessment</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
  $('assessmentIndividualReport').innerHTML='<div class="empty">Pilih Sales Person untuk melihat bagan hasil, problem utama, dan rekomendasi action.</div>';
@@ -663,10 +667,10 @@ $('assessmentForm').addEventListener('submit',e=>{
  const all=mergeAssessmentRows(assessmentRecords(),[record]);saveAssessmentRecords(all);
  $('assessmentForm').reset();$('assessmentPeriod').value=$('month').value||new Date().toISOString().slice(0,7);
  $('assessmentForm').hidden=true;$('assessmentPassword').value='';authenticatedAssessmentName='';
- $('assessmentAuthMessage').textContent='';$('assessmentSubmitMessage').textContent='Assessment tersimpan di perangkat. Mengirim ke penyimpanan bersama…';
+ $('assessmentAuthMessage').textContent='';$('assessmentSubmitMessage').textContent='Assessment tersimpan. Mengirim ke rekap bersama…';
  renderAssessmentRecords();
  if(assessmentSyncUrl()){pushAssessmentRows([record]).then(()=>syncAssessmentData(false)).catch(err=>setAssessmentSyncStatus('Data tersimpan lokal, tetapi pengiriman cloud gagal: '+err.message,true));}
- else setAssessmentSyncStatus('Data tersimpan lokal. Atur URL Web App untuk mengirim hasil ke semua perangkat.',true);
+ else {setAssessmentSyncStatus('Belum terhubung ke penyimpanan bersama. Data ini hanya ada di perangkat pengisi sampai URL Web App disetel.',true);$('assessmentSubmitMessage').textContent='Tersimpan di HP ini saja — belum masuk ke rekap bersama.';}
 });
 $('assessmentExport').addEventListener('click',()=>{
  const rows=assessmentRecords();if(!rows.length){alert('Belum ada assessment untuk diekspor.');return}
