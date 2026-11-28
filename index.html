@@ -685,6 +685,7 @@ $('assessmentToggle').addEventListener('click',()=>{if(!$('assessmentPanel').hid
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
 setInterval(()=>loadPublishedCsv(true),AUTO_SYNC_MS);
+setInterval(()=>{if(assessmentSyncUrl()&&!document.hidden)syncAssessmentData(false)},60000);
 document.addEventListener('visibilitychange',()=>{
  if(!document.hidden&&!isManualUpload)loadPublishedCsv(true);
 });
