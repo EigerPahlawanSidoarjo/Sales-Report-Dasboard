@@ -46,7 +46,6 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 </section>
 <section class="kpis">
  <div class="card"><div class="kpi-label">Sales Hari Ini</div><div class="kpi-value" id="today">Rp 0</div><div class="kpi-note" id="todayNote">Tanggal berjalan</div></div>
- <div class="card"><div class="kpi-label">Sales Kumulatif (MTD)</div><div class="kpi-value" id="mtd">Rp 0</div><div class="kpi-note" id="mtdNote">Tanggal 1 sampai hari berjalan</div></div>
  <div class="card"><div class="kpi-label">Total Transaksi</div><div class="kpi-value" id="trx">0</div><div class="kpi-note">Nomor invoice/order unik</div></div>
  <div class="card"><div class="kpi-label">Rata-rata per Transaksi</div><div class="kpi-value" id="avg">Rp 0</div><div class="kpi-note">Total sales ÷ transaksi</div></div>
 </section>
@@ -230,7 +229,6 @@ function renderCustomerDetail(rows,totalSales){
   x.transactionCount=x.transactions.size;
   x.repeat=x.transactionCount>1;
   x.contribution=totalSales?x.value/totalSales*100:0;
-  running+=x.contribution;x.cumulative=running;
  });
  const query=norm($('customerSearch').value);
  const filtered=sorted.filter(x=>norm(x.name).includes(query));
@@ -253,17 +251,16 @@ function render(){
  visibleRows=rows;
  const daily=new Map();rows.forEach(r=>{const k=keyDate(r._date);daily.set(k,(daily.get(k)||0)+r._net)});
  const lastDay=month===today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')?today.getDate():new Date(yy,mm,0).getDate();
- let cumulative=0,dailyHtml='';
+ let dailyHtml='';
  for(let day=1;day<=lastDay;day++){
-  const k=yy+'-'+String(mm).padStart(2,'0')+'-'+String(day).padStart(2,'0'),v=daily.get(k)||0;cumulative+=v;
-  dailyHtml+='<tr><td>'+String(day).padStart(2,'0')+'/'+String(mm).padStart(2,'0')+'/'+yy+'</td><td class="num">'+rupiah(v)+'</td><td class="num"><b>'+rupiah(cumulative)+'</b></td></tr>';
+  const k=yy+'-'+String(mm).padStart(2,'0')+'-'+String(day).padStart(2,'0'),v=daily.get(k)||0;
+  dailyHtml+='<tr><td>'+String(day).padStart(2,'0')+'/'+String(mm).padStart(2,'0')+'/'+yy+'</td><td class="num">'+rupiah(v)+'</td></tr>';
  }
  $('daily').innerHTML=dailyHtml||'<tr><td colspan="2" class="empty">Tidak ada data</td></tr>';
  const mtd=rows.reduce((s,r)=>s+r._net,0),todaySales=rows.filter(r=>keyDate(r._date)===currentKey).reduce((s,r)=>s+r._net,0);
  const invoices=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])).filter(Boolean));
  $('today').textContent=rupiah(todaySales);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);
  $('todayNote').textContent=today.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
- $('mtdNote').textContent=number(rows.length)+' baris item · '+month;
  const people=aggregate(rows,'Sales Person');
  $('people').innerHTML=people.map(([name,val],i)=>{
   const subset=rows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===name);
