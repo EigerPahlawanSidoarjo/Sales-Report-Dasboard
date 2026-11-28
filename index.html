@@ -69,6 +69,12 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  </div>
  <p class="kpi-note" style="margin-top:12px">Dihitung dari customer unik dan nomor Invoice No (jika kosong menggunakan Order No) yang unik. Mengikuti filter bulan dan status transaksi.</p>
 </section>
+<section class="card" style="margin-bottom:14px">
+ <h2>Detail Konsumen <span class="sub">· kontribusi sales dan persentase kumulatif</span></h2>
+ <div class="customer-tools"><input id="customerSearch" type="search" placeholder="Cari nama konsumen..."><span class="customer-summary" id="customerSummary">0 konsumen</span></div>
+ <div class="table-wrap"><table><thead><tr><th>#</th><th>Nama Konsumen</th><th class="num">Value Sales</th><th class="num">Transaksi</th><th class="num">Qty</th><th class="num">Kontribusi Sales</th><th class="num">Kumulatif</th></tr></thead><tbody id="customerDetail"></tbody></table></div>
+ <p class="kpi-note" style="margin-top:10px">Kontribusi = sales konsumen ÷ total sales pada filter. Kumulatif = akumulasi kontribusi konsumen sesuai urutan value sales terbesar.</p>
+</section>
 </main>
 <footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
 <script>
@@ -205,6 +211,24 @@ function renderRepeatCustomers(rows){
  $('repeatSales').textContent=rupiah(repeatSales);
  $('repeatSalesPct').textContent=pct(repeatSales,totalSales)+' dari total sales';
 }
+function renderCustomerDetail(rows,totalSales){
+ const customers=new Map();
+ rows.forEach(r=>{
+  const original=clean(r['Customer Name'])||'(Nama tidak diisi)';
+  const key=norm(original);
+  const item=customers.get(key)||{name:original,value:0,qty:0,transactions:new Set()};
+  item.value+=r._net;item.qty+=r._qty;
+  const trx=clean(r['Invoice No'])||clean(r['Order No']);if(trx)item.transactions.add(trx);
+  customers.set(key,item);
+ });
+ const sorted=[...customers.values()].sort((a,b)=>b.value-a.value);
+ let running=0;
+ sorted.forEach(x=>{x.contribution=totalSales?x.value/totalSales*100:0;running+=x.contribution;x.cumulative=running;});
+ const query=norm($('customerSearch').value);
+ const filtered=sorted.filter(x=>norm(x.name).includes(query));
+ $('customerSummary').textContent=number(filtered.length)+' / '+number(sorted.length)+' konsumen · total sales '+rupiah(totalSales);
+ $('customerDetail').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td><td class="num">'+number(x.transactions.size)+'</td><td class="num">'+number(x.qty)+'</td><td class="num">'+x.contribution.toFixed(2)+'%</td><td class="num"><b>'+Math.min(x.cumulative,100).toFixed(2)+'%</b></td></tr>').join('')||'<tr><td colspan="7" class="empty">Tidak ada data konsumen</td></tr>';
+}
 function render(){
  if(!sourceRows.length)return;
  const month=$('month').value;if(!month)return;
@@ -237,7 +261,7 @@ function render(){
   return '<tr><td>'+(i+1)+'</td><td>'+esc(name)+'</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
  }).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
  renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
- renderRepeatCustomers(rows);
+ renderRepeatCustomers(rows);\n renderCustomerDetail(rows,mtd);
  const detail=new Map();rows.forEach(r=>{
   const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;
   const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x);
@@ -255,7 +279,7 @@ $('file').addEventListener('change',async e=>{
 });
 $('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
 $('month').addEventListener('change',render);
-$('status').addEventListener('change',render);
+$('status').addEventListener('change',render);\n$('customerSearch').addEventListener('input',render);
 
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
