@@ -270,7 +270,8 @@ function render(){
   return '<tr><td>'+(i+1)+'</td><td>'+esc(name)+'</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
  }).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
  renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
- renderRepeatCustomers(rows);\n renderCustomerDetail(rows,mtd);
+ renderRepeatCustomers(rows);
+ renderCustomerDetail(rows,mtd);
  const detail=new Map();rows.forEach(r=>{
   const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;
   const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x);
@@ -288,7 +289,8 @@ $('file').addEventListener('change',async e=>{
 });
 $('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
 $('month').addEventListener('change',render);
-$('status').addEventListener('change',render);\n$('customerSearch').addEventListener('input',render);
+$('status').addEventListener('change',render);
+$('customerSearch').addEventListener('input',render);
 
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
