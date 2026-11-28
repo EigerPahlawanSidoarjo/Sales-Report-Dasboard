@@ -72,7 +72,7 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 <section class="card" style="margin-bottom:14px">
  <h2>Detail Konsumen <span class="sub">· kontribusi sales dan persentase kumulatif</span></h2>
  <div class="customer-tools"><input id="customerSearch" type="search" placeholder="Cari nama konsumen..."><span class="customer-summary" id="customerSummary">0 konsumen</span></div>
- <div class="table-wrap"><table><thead><tr><th>#</th><th>Nama Konsumen</th><th class="num">Value Sales</th><th class="num">Transaksi</th><th class="num">Qty</th><th class="num">Kontribusi Sales</th><th class="num">Kumulatif</th></tr></thead><tbody id="customerDetail"></tbody></table></div>
+ <div class="table-wrap"><table><thead><tr><th>#</th><th>Nama Konsumen</th><th class="num">Value Sales</th><th class="num">Transaksi</th><th class="num">Qty</th><th class="num">Frekuensi</th><th class="num">Kontribusi Sales</th><th class="num">Kumulatif</th></tr></thead><tbody id="customerDetail"></tbody></table></div>
  <p class="kpi-note" style="margin-top:10px">Kontribusi = sales konsumen ÷ total sales pada filter. Kumulatif = akumulasi kontribusi konsumen sesuai urutan value sales terbesar.</p>
 </section>
 </main>
@@ -185,13 +185,16 @@ function renderBars(id,items){
 }
 function renderRepeatCustomers(rows){
  const customers=new Map();
+ const transactionCustomers=new Map();
  rows.forEach(r=>{
   const name=norm(r['Customer Name'])||'(nama kosong)';
   const transaction=clean(r['Invoice No'])||clean(r['Order No']);
-  const item=customers.get(name)||{transactions:new Set(),value:0};
-  if(transaction)item.transactions.add(transaction);
-  item.value+=r._net;
-  customers.set(name,item);
+  const item=customers.get(name)||{transactions:new Set(),value:0,qty:0};
+  if(transaction){
+   item.transactions.add(transaction);
+   const owner=transactionCustomers.get(transaction)||new Set();owner.add(name);transactionCustomers.set(transaction,owner);
+  }
+  item.value+=r._net;item.qty+=r._qty;customers.set(name,item);
  });
  const all=[...customers.values()];
  const repeat=all.filter(x=>x.transactions.size>1);
@@ -201,13 +204,13 @@ function renderRepeatCustomers(rows){
  const repeatTransaction=repeat.reduce((sum,x)=>sum+x.transactions.size,0);
  const repeatSales=repeat.reduce((sum,x)=>sum+x.value,0);
  const totalSales=rows.reduce((sum,r)=>sum+r._net,0);
- const pct=(n,d)=>d?(n/d*100).toFixed(1)+'%':'0.0%';
+ const pct=(n,d)=>d?(n/d*100).toFixed(2)+'%':'0.00%';
  $('repeatCustomerPct').textContent=pct(repeat.length,totalCustomer);
- $('repeatCustomerCount').textContent=number(repeat.length)+' dari '+number(totalCustomer)+' customer';
+ $('repeatCustomerCount').textContent=number(repeat.length)+' dari '+number(totalCustomer)+' customer bertransaksi lebih dari 1x';
  $('repeatTrxPct').textContent=pct(repeatTransaction,totalTransaction);
- $('repeatTrxCount').textContent=number(repeatTransaction)+' dari '+number(totalTransaction)+' transaksi';
+ $('repeatTrxCount').textContent=number(repeatTransaction)+' dari '+number(totalTransaction)+' transaksi dilakukan customer berulang';
  $('oneTimeCustomerPct').textContent=pct(once.length,totalCustomer);
- $('oneTimeCustomerCount').textContent=number(once.length)+' dari '+number(totalCustomer)+' customer';
+ $('oneTimeCustomerCount').textContent=number(once.length)+' dari '+number(totalCustomer)+' customer bertransaksi tepat 1x';
  $('repeatSales').textContent=rupiah(repeatSales);
  $('repeatSalesPct').textContent=pct(repeatSales,totalSales)+' dari total sales';
 }
@@ -223,11 +226,17 @@ function renderCustomerDetail(rows,totalSales){
  });
  const sorted=[...customers.values()].sort((a,b)=>b.value-a.value);
  let running=0;
- sorted.forEach(x=>{x.contribution=totalSales?x.value/totalSales*100:0;running+=x.contribution;x.cumulative=running;});
+ sorted.forEach(x=>{
+  x.transactionCount=x.transactions.size;
+  x.repeat=x.transactionCount>1;
+  x.contribution=totalSales?x.value/totalSales*100:0;
+  running+=x.contribution;x.cumulative=running;
+ });
  const query=norm($('customerSearch').value);
  const filtered=sorted.filter(x=>norm(x.name).includes(query));
- $('customerSummary').textContent=number(filtered.length)+' / '+number(sorted.length)+' konsumen · total sales '+rupiah(totalSales);
- $('customerDetail').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td><td class="num">'+number(x.transactions.size)+'</td><td class="num">'+number(x.qty)+'</td><td class="num">'+x.contribution.toFixed(2)+'%</td><td class="num"><b>'+Math.min(x.cumulative,100).toFixed(2)+'%</b></td></tr>').join('')||'<tr><td colspan="7" class="empty">Tidak ada data konsumen</td></tr>';
+ const repeatCount=sorted.filter(x=>x.repeat).length;
+ $('customerSummary').textContent=number(filtered.length)+' / '+number(sorted.length)+' konsumen · '+number(repeatCount)+' repeat customer · sales '+rupiah(totalSales);
+ $('customerDetail').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td><td class="num">'+number(x.transactionCount)+'</td><td class="num">'+number(x.qty)+'</td><td class="num">'+(x.repeat?'<b style="color:var(--green)">Repeat</b>':'1x')+'</td><td class="num">'+x.contribution.toFixed(2)+'%</td><td class="num"><b>'+Math.min(x.cumulative,100).toFixed(2)+'%</b></td></tr>').join('')||'<tr><td colspan="8" class="empty">Tidak ada data konsumen</td></tr>';
 }
 function render(){
  if(!sourceRows.length)return;
