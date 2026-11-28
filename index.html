@@ -481,38 +481,85 @@ function renderIndividualAssessmentReport(){
  if(!name){host.innerHTML='<div class="empty">Pilih Sales Person untuk melihat laporan individu.</div>';return}
  const records=assessmentRecords().filter(r=>r.name===name).sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
  if(!records.length){host.innerHTML='<div class="empty">Belum ada hasil assessment untuk individu ini.</div>';return}
- const rec=records[0],ratingAnswers=rec.answers.filter(a=>a.type==='rating');
+ const rec=records[0],previous=records.slice(1).find(r=>r.period===rec.period||r.period<rec.period);
+ const ratingAnswers=rec.answers.filter(a=>a.type==='rating').map(a=>({...a,score:Number(a.answer)})).filter(a=>Number.isFinite(a.score));
  const categoryScores=assessmentGroups.map(g=>{
   const qs=new Set(g.items.filter(x=>x[1]==='rating').map(x=>x[0]));
-  const vals=ratingAnswers.filter(a=>qs.has(a.question)).map(a=>Number(a.answer)).filter(Number.isFinite);
+  const vals=ratingAnswers.filter(a=>qs.has(a.question)).map(a=>a.score);
   return {name:g.title,score:vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0,count:vals.length};
  }).filter(x=>x.count);
- const average=ratingAnswers.length?ratingAnswers.reduce((s,a)=>s+Number(a.answer),0)/ratingAnswers.length:0;
+ const average=ratingAnswers.length?ratingAnswers.reduce((s,a)=>s+a.score,0)/ratingAnswers.length:0;
  const lowest=categoryScores.slice().sort((a,b)=>a.score-b.score);
  const strongest=categoryScores.slice().sort((a,b)=>b.score-a.score)[0];
  const weak=lowest.filter(x=>x.score<3.5).slice(0,2);
  const focus=weak.length?weak:lowest.slice(0,1);
- const textAnswers=rec.answers.filter(a=>a.type==='text'&&a.answer.trim());
- const categoryForQuestion=q=>assessmentGroups.find(g=>g.items.some(x=>x[0]===q))?.title;
- const relatedText=focus.flatMap(cat=>textAnswers.filter(a=>categoryForQuestion(a.question)===cat.name).map(a=>({question:a.question,answer:a.answer}))).slice(0,5);
- const actions=focus.flatMap(cat=>(assessmentCategoryTips[cat.name]?.actions||['Diskusikan hasil evaluasi dengan Store Leader dan sepakati target perbaikan mingguan.']).map(x=>({category:cat.name,text:x})));
+ const level=s=>s<2?'Kritis':s<3?'Perlu Perbaikan':s<3.5?'Perlu Penguatan':s<4.5?'Baik':'Unggul';
+ const levelColor=s=>s<3?'#b45309':s<3.5?'#a16207':'#176b45';
  const status=average>=4.5?'Sangat Baik':average>=3.5?'Baik':average>=2.5?'Cukup':'Perlu Pendampingan';
- const color=average>=3.5?'#176b45':'#b45309';
- host.innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;margin-bottom:14px">'+
-  '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Rata-rata Individu</div><div class="kpi-value">'+average.toFixed(2)+'/5</div><div class="kpi-note">Status: <b style="color:'+color+'">'+status+'</b></div></div>'+
-  '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Periode & Week</div><div class="kpi-value" style="font-size:20px">'+esc(rec.period)+' · '+esc(rec.week||'-')+'</div><div class="kpi-note">Submit '+esc(new Date(rec.submittedAt).toLocaleDateString('id-ID'))+'</div></div>'+
-  '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Area Terkuat</div><div style="font-weight:800;margin-top:8px">'+esc(strongest?.name.split(' · ')[0]||'-')+'</div><div class="kpi-note">'+(strongest?strongest.score.toFixed(2)+'/5':'Belum ada data')+'</div></div></div>'+
-  '<h3 style="font-size:13px;margin:10px 0">Bagan Penilaian per Kategori</h3>'+
-  categoryScores.map(x=>'<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:5px"><b>'+esc(x.name)+'</b><b>'+x.score.toFixed(2)+'/5</b></div><div style="height:12px;border-radius:20px;background:#e9eeea;overflow:hidden"><div style="height:100%;width:'+(x.score/5*100)+'%;background:'+(x.score<3?'#c16a36':'#238052')+';border-radius:20px"></div></div></div>').join('')+
-  '<div class="grid2" style="margin:16px 0"><div class="card" style="background:#fff8f1"><h3 style="font-size:13px;margin:0 0 8px">Problem Utama / Area Prioritas</h3>'+
-  (focus.map(cat=>'<p style="font-size:12px;margin:8px 0"><b>'+esc(cat.name)+'</b> · Nilai '+cat.score.toFixed(2)+'/5<br>'+esc(assessmentCategoryTips[cat.name]?.problem||'Perlu ditinjau lebih lanjut bersama Store Leader.')+'</p>').join(''))+
-  (relatedText.length?'<div style="border-top:1px solid #eadfd5;padding-top:8px;margin-top:8px"><b style="font-size:11px">Catatan dari jawaban individu</b>'+relatedText.map(a=>'<p style="font-size:11px;margin:6px 0"><b>'+esc(a.question)+'</b><br>'+esc(a.answer)+'</p>').join('')+'</div>':'<p class="kpi-note">Tidak ada jawaban naratif pada kategori prioritas.</p>')+
-  '</div><div class="card" style="background:#f1f8f3"><h3 style="font-size:13px;margin:0 0 8px">Kekuatan yang Perlu Dipertahankan</h3>'+
-  (strongest?'<p style="font-size:12px"><b>'+esc(strongest.name)+'</b><br>Nilai '+strongest.score.toFixed(2)+'/5. Pertahankan konsistensi dan bagikan praktik baik kepada tim.</p>':'-')+
-  '<p class="kpi-note">Analisis menggunakan nilai skala 1–5 dan jawaban tertulis pada assessment terakhir.</p></div></div>'+
-  '<h3 style="font-size:13px;margin:12px 0 8px">Action Recommendation / Rencana Tindak Lanjut</h3>'+
-  '<ol style="padding-left:20px;margin:0">'+actions.map(a=>'<li style="margin:8px 0;font-size:12px"><b>'+esc(a.category.split(' · ')[0])+':</b> '+esc(a.text)+'</li>').join('')+'</ol>'+
-  '<div class="card" style="margin-top:14px;background:#f8faf8"><b style="font-size:12px">Komitmen coaching yang disarankan</b><p style="font-size:12px;margin:6px 0 0">Store Leader dan Sales Person menyepakati 1–2 prioritas utama, melakukan check-in mingguan, lalu mengukur perubahan pada assessment berikutnya.</p></div>';
+ const categoryForQuestion=q=>assessmentGroups.find(g=>g.items.some(x=>x[0]===q))?.title;
+ const textAnswers=rec.answers.filter(a=>a.type==='text'&&a.answer.trim());
+ const relatedText=focus.flatMap(cat=>textAnswers.filter(a=>categoryForQuestion(a.question)===cat.name).map(a=>({question:a.question,answer:a.answer}))).slice(0,8);
+ const lowQuestions=ratingAnswers.slice().sort((a,b)=>a.score-b.score).slice(0,5);
+ const highQuestions=ratingAnswers.slice().sort((a,b)=>b.score-a.score).slice(0,3);
+ const prevMap=new Map((previous?.answers||[]).filter(a=>a.type==='rating').map(a=>[a.question,Number(a.answer)]));
+ const priorAverage=previous?([...prevMap.values()].reduce((s,v)=>s+v,0)/(prevMap.size||1)):null;
+ const delta=priorAverage===null?null:average-priorAverage;
+ const keywordGroups=[
+  {label:'Target & pencapaian sales',words:['target','sales','penjualan','omzet','omset','pencapaian']},
+  {label:'Upselling, cross-selling & ATV/UPT',words:['upsell','cross','atv','upt','tambahan','item','transaksi']},
+  {label:'Kepercayaan diri & closing',words:['percaya diri','closing','menutup','ragu','takut']},
+  {label:'Product knowledge',words:['produk','artikel','material','teknologi','kategori','fungsi']},
+  {label:'Pelayanan & komunikasi',words:['customer','pelanggan','greeting','komunikasi','komplain','keberatan']},
+  {label:'Teamwork & operasional',words:['tim','team','rekan','display','sop','disiplin','inisiatif','operasional']}
+ ];
+ const narrativeText=textAnswers.map(a=>a.answer.toLowerCase()).join(' ');
+ const narrativeSignals=keywordGroups.map(g=>({...g,hits:g.words.filter(w=>narrativeText.includes(w)).length})).filter(g=>g.hits).sort((a,b)=>b.hits-a.hits).slice(0,4);
+ const actionsByCategory={
+  'B. Sales Achievement · Pencapaian Penjualan':[
+   'Sebelum shift, tulis target sales harian dan pecah menjadi target per jam atau per shift.',
+   'Pada setiap interaksi yang relevan, tawarkan satu produk pelengkap dan satu opsi produk dengan value lebih tinggi.',
+   'Catat sales, jumlah transaksi, ATV, dan UPT setiap akhir shift; bahas selisih target dengan Leader.'
+  ],
+  'C. Selling Skill & Customer Service':[
+   'Gunakan alur greeting → probing kebutuhan → rekomendasi manfaat → konfirmasi keberatan → closing.',
+   'Latihan role-play 10–15 menit minimal dua kali seminggu untuk handling objection dan closing.',
+   'Minta Leader mengobservasi minimal dua interaksi customer per minggu dan memberi feedback spesifik.'
+  ],
+  'D. Product Knowledge':[
+   'Pelajari minimal dua artikel produk per minggu: fungsi, material, teknologi, keunggulan, dan target penggunaan.',
+   'Buat catatan perbandingan dua produk sejenis agar rekomendasi lebih tepat.',
+   'Lakukan product sharing singkat dan simulasi menjelaskan produk kepada rekan.'
+  ],
+  'E. Teamwork & Operational Performance':[
+   'Konfirmasi pembagian tugas dan prioritas area saat briefing awal shift.',
+   'Gunakan checklist pribadi untuk display, kebersihan, kerapian, dan kepatuhan SOP.',
+   'Saat traffic tinggi, komunikasikan kebutuhan bantuan dan ambil inisiatif membantu area yang membutuhkan.'
+  ]
+ };
+ const focusActions=focus.flatMap(cat=>(actionsByCategory[cat.name]||['Diskusikan hasil kategori ini dengan Store Leader dan tetapkan indikator perbaikan.']).map((text,i)=>({category:cat.name,text,priority:cat.score<3?'Prioritas tinggi':'Prioritas penguatan'})));
+ const benchmark=categoryScores.length?categoryScores.reduce((s,x)=>s+x.score,0)/categoryScores.length:0;
+ const questionRows=lowQuestions.map(a=>'<tr><td>'+esc(a.question)+'</td><td class="num"><b>'+a.score+'/5</b></td><td>'+level(a.score)+'</td></tr>').join('');
+ const strengths=highQuestions.map(a=>'<li style="margin:5px 0;font-size:12px">'+esc(a.question)+' <b>('+a.score+'/5)</b></li>').join('');
+ const trendHtml=previous?'<div class="card" style="flex:1;min-width:180px"><div class="kpi-label">Perbandingan Assessment Sebelumnya</div><div class="kpi-value" style="font-size:22px">'+(delta>0?'+':'')+delta.toFixed(2)+' poin</div><div class="kpi-note">Sebelumnya '+priorAverage.toFixed(2)+'/5 · sekarang '+average.toFixed(2)+'/5 · '+(delta>0?'meningkat':delta<0?'menurun':'stabil')+'</div><div class="kpi-note">Pembanding: '+esc(previous.period)+' · '+esc(previous.week||'-')+'</div></div>':'<div class="card" style="flex:1;min-width:180px"><div class="kpi-label">Tren Perkembangan</div><div style="font-weight:700;margin-top:8px">Belum tersedia</div><div class="kpi-note">Perlu minimal dua assessment untuk melihat perubahan skor.</div></div>';
+ const focusHtml=focus.map(cat=>'<div style="padding:10px 0;border-bottom:1px solid #eadfd5"><b>'+esc(cat.name)+'</b><div style="font-size:12px;margin-top:4px">Skor '+cat.score.toFixed(2)+'/5 · '+level(cat.score)+'</div><p style="font-size:12px;margin:5px 0">'+esc(cat.score<2?'Indikasi kesenjangan cukup besar. Perlu coaching langsung dan pemantauan dekat.':cat.score<3?'Kemampuan belum konsisten dan perlu latihan terstruktur.':'Sudah cukup baik, tetapi perlu distabilkan agar menjadi kebiasaan kerja.')+'</p></div>').join('');
+ const actionHtml=focusActions.map((a,i)=>'<li style="margin:9px 0;font-size:12px"><b>'+esc(a.priority)+' · '+esc(a.category.split(' · ')[0])+'</b><br>'+esc(a.text)+'</li>').join('');
+ host.innerHTML=
+ '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;margin-bottom:14px">'+
+ '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Skor Rata-rata</div><div class="kpi-value">'+average.toFixed(2)+'/5</div><div class="kpi-note">Status: <b style="color:'+levelColor(average)+'">'+status+'</b></div></div>'+
+ '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Periode Evaluasi</div><div class="kpi-value" style="font-size:20px">'+esc(rec.period)+' · '+esc(rec.week||'-')+'</div><div class="kpi-note">Submit '+esc(new Date(rec.submittedAt).toLocaleDateString('id-ID'))+'</div></div>'+
+ '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Area Terkuat</div><div style="font-weight:800;margin-top:8px">'+esc(strongest?.name.split(' · ')[0]||'-')+'</div><div class="kpi-note">'+(strongest?strongest.score.toFixed(2)+'/5':'Belum ada data')+'</div></div>'+trendHtml+'</div>'+
+ '<div class="card" style="margin-bottom:14px;background:#f8faf8"><h3 style="font-size:13px;margin:0 0 8px">Interpretasi Hasil</h3><p style="font-size:12px;margin:0">Skor rata-rata <b>'+average.toFixed(2)+'/5</b> menunjukkan performa self-assessment berada pada kategori <b>'+status+'</b>. Rata-rata kategori penilaian adalah '+benchmark.toFixed(2)+'/5. '+(focus.length?'Fokus pengembangan utama saat ini berada pada '+focus.map(x=>esc(x.name.split(' · ')[0])+' ('+x.score.toFixed(2)+')').join(' dan ')+'.':'Pertahankan performa dan pantau konsistensi pada periode berikutnya.')+'</p><p class="kpi-note">Skor berasal dari penilaian diri sendiri, bukan hasil observasi langsung atau audit kinerja.</p></div>'+
+ '<h3 style="font-size:13px;margin:10px 0">Bagan Skor per Kategori</h3>'+
+ categoryScores.map(x=>'<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:5px"><b>'+esc(x.name)+'</b><b>'+x.score.toFixed(2)+'/5 · '+level(x.score)+'</b></div><div style="height:13px;border-radius:20px;background:#e9eeea;overflow:hidden"><div style="height:100%;width:'+(x.score/5*100)+'%;background:'+levelColor(x.score)+';border-radius:20px"></div></div><div class="kpi-note">'+x.count+' pertanyaan penilaian · '+(x.score/5*100).toFixed(0)+'% dari skor maksimal</div></div>').join('')+
+ '<div class="grid2" style="margin:16px 0"><div class="card" style="background:#fff8f1"><h3 style="font-size:13px;margin:0 0 8px">Analisis Problem Utama</h3>'+focusHtml+
+ (relatedText.length?'<div style="border-top:1px solid #eadfd5;padding-top:8px;margin-top:8px"><b style="font-size:11px">Jawaban individu yang relevan</b>'+relatedText.map(a=>'<p style="font-size:11px;margin:7px 0"><b>'+esc(a.question)+'</b><br>'+esc(a.answer)+'</p>').join('')+'</div>':'<p class="kpi-note">Tidak ada jawaban naratif pada kategori prioritas.</p>')+
+ '</div><div class="card" style="background:#f1f8f3"><h3 style="font-size:13px;margin:0 0 8px">Kekuatan & Hal Positif</h3><p style="font-size:12px"><b>'+esc(strongest?.name||'Belum ada data')+'</b><br>Skor '+(strongest?strongest.score.toFixed(2)+'/5':'-')+'. Area ini perlu dipertahankan dan dapat dijadikan praktik baik.</p><ul style="padding-left:18px">'+strengths+'</ul></div></div>'+
+ '<div class="card" style="margin-bottom:14px"><h3 style="font-size:13px;margin:0 0 8px">5 Pertanyaan dengan Skor Terendah</h3><div class="table-wrap"><table><thead><tr><th>Aspek yang Dinilai</th><th class="num">Skor</th><th>Interpretasi</th></tr></thead><tbody>'+questionRows+'</tbody></table></div><p class="kpi-note">Pertanyaan dengan skor terendah menjadi petunjuk paling spesifik untuk menentukan materi coaching.</p></div>'+
+ '<div class="card" style="margin-bottom:14px"><h3 style="font-size:13px;margin:0 0 8px">Tema yang Muncul pada Jawaban Tertulis</h3>'+(narrativeSignals.length?narrativeSignals.map(s=>'<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px"><span>'+esc(s.label)+'</span><b>'+s.hits+' kata kunci terdeteksi</b></div>').join(''):'<p class="kpi-note">Belum ada tema kata kunci yang terdeteksi. Baca jawaban tertulis secara manual untuk memahami konteksnya.</p>')+'<p class="kpi-note">Tema ini hanya pemetaan kata kunci dari jawaban tertulis, bukan kesimpulan otomatis tentang penyebab masalah.</p></div>'+
+ '<h3 style="font-size:13px;margin:12px 0 8px">Action Plan yang Disarankan</h3><div class="table-wrap"><table><thead><tr><th>Prioritas</th><th>Action / Aktivitas</th><th>Penanggung Jawab</th><th>Waktu</th><th>Indikator Keberhasilan</th></tr></thead><tbody>'+
+ focusActions.map((a,i)=>'<tr><td><b>'+(i+1)+'</b><br>'+esc(a.priority)+'</td><td>'+esc(a.text)+'</td><td>Sales Person + Store Leader</td><td>7 hari / evaluasi mingguan</td><td>Aktivitas terlaksana dan skor aspek terkait meningkat pada assessment berikutnya.</td></tr>').join('')+
+ '</tbody></table></div>'+
+ '<div class="card" style="margin-top:14px;background:#f8faf8"><b style="font-size:12px">Panduan coaching untuk Store Leader</b><ol style="font-size:12px;padding-left:20px"><li>Validasi hasil self-assessment melalui observasi kerja dan data sales aktual.</li><li>Tanyakan contoh kejadian nyata di balik skor terendah, bukan langsung menyimpulkan penyebab.</li><li>Pilih maksimal dua fokus utama agar action plan realistis.</li><li>Lakukan check-in singkat setiap minggu dan catat progres.</li><li>Bandingkan hasil Week 1 dan Week 3 untuk melihat perubahan perilaku dan kebutuhan dukungan.</li></ol></div>';
 }
 
 
