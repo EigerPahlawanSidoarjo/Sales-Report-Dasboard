@@ -399,7 +399,7 @@ $('customerSearch').addEventListener('input',render);
 const ASSESSMENT_STORAGE_KEY='eiger2077_sales_team_assessments_v1';
 const ASSESSMENT_SYNC_URL_KEY='eiger2077_assessment_sync_url_v1';
 // Isi URL deployment /exec ini satu kali setelah Apps Script selesai di-deploy; berlaku untuk semua perangkat.
-const ASSESSMENT_SYNC_URL_DEFAULT='';
+const ASSESSMENT_SYNC_URL_DEFAULT='https://script.google.com/macros/s/AKfycbwwGY52tB_lROD3qgL9OLVVsH1ksxayAQkchrysQUYkPKeMfYlcPd5pDSuGAZJlRBnK/exec';
 function assessmentSyncUrl(){return ASSESSMENT_SYNC_URL_DEFAULT||localStorage.getItem(ASSESSMENT_SYNC_URL_KEY)||''}
 function assessmentRecordId(r){return r.id||[r.name,r.period,r.week||'',r.submittedAt].join('|')}
 function normalizeAssessmentRecord(r){return {...r,id:assessmentRecordId(r)}}
