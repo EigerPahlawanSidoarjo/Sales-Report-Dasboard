@@ -60,9 +60,14 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
 </section>
 <section class="card" style="margin-bottom:14px"><h2>Detail Ringkasan Kategori</h2><div class="table-wrap"><table><thead><tr><th>Category Lv.3</th><th>Category Lv.4</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Kontribusi</th></tr></thead><tbody id="categoryDetail"></tbody></table></div></section>
 <section class="card" style="margin-bottom:14px">
- <h2>Rekap Customer <span class="sub">· jumlah transaksi dan total value</span></h2>
- <div class="customer-tools"><input id="customerSearch" type="search" placeholder="Cari nama customer..."><div class="customer-summary" id="customerSummary">0 customer</div></div>
- <div class="table-wrap"><table><thead><tr><th>#</th><th>Customer Name</th><th class="num">Jumlah Transaksi</th><th class="num">Total Value</th></tr></thead><tbody id="customerTable"></tbody></table></div>
+ <h2>Repeat Customer <span class="sub">· analisis customer yang bertransaksi lebih dari 1 kali</span></h2>
+ <div class="kpis" style="margin:0">
+  <div class="card"><div class="kpi-label">Customer Berulang</div><div class="kpi-value" id="repeatCustomerPct">0%</div><div class="kpi-note" id="repeatCustomerCount">0 dari 0 customer</div></div>
+  <div class="card"><div class="kpi-label">Transaksi dari Customer Berulang</div><div class="kpi-value" id="repeatTrxPct">0%</div><div class="kpi-note" id="repeatTrxCount">0 dari 0 transaksi</div></div>
+  <div class="card"><div class="kpi-label">Customer Bertransaksi 1x</div><div class="kpi-value" id="oneTimeCustomerPct">0%</div><div class="kpi-note" id="oneTimeCustomerCount">0 dari 0 customer</div></div>
+  <div class="card"><div class="kpi-label">Sales Customer Berulang</div><div class="kpi-value" id="repeatSales">Rp 0</div><div class="kpi-note" id="repeatSalesPct">0% dari total sales</div></div>
+ </div>
+ <p class="kpi-note" style="margin-top:12px">Dihitung dari customer unik dan nomor Invoice No (jika kosong menggunakan Order No) yang unik. Mengikuti filter bulan dan status transaksi.</p>
 </section>
 </main>
 <footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
@@ -172,22 +177,33 @@ function renderBars(id,items){
  const max=items.length?Math.max(...items.map(x=>x[1])):0;
  $(id).innerHTML=items.length?items.slice(0,10).map(([name,val],i)=>'<div class="bar-row"><div title="'+esc(name)+'">'+(i+1)+'. '+esc(name)+'</div><div class="bar-bg"><div class="bar" style="width:'+(max?val/max*100:0)+'%"></div></div><b>'+rupiah(val)+'</b></div>').join(''):'<div class="empty">Belum ada data</div>';
 }
-function renderCustomers(rows){
+function renderRepeatCustomers(rows){
  const customers=new Map();
  rows.forEach(r=>{
-  const name=clean(r['Customer Name'])||'(Nama customer kosong)';
+  const name=norm(r['Customer Name'])||'(nama kosong)';
   const transaction=clean(r['Invoice No'])||clean(r['Order No']);
   const item=customers.get(name)||{transactions:new Set(),value:0};
   if(transaction)item.transactions.add(transaction);
   item.value+=r._net;
   customers.set(name,item);
  });
- const sorted=[...customers.entries()].map(([name,x])=>({name,count:x.transactions.size,value:x.value}))
-  .sort((a,b)=>b.value-a.value);
- $('customerSummary').textContent=number(sorted.length)+' customer · '+number(sorted.reduce((s,x)=>s+x.count,0))+' transaksi';
- const q=norm($('customerSearch').value);
- const filtered=sorted.filter(x=>norm(x.name).includes(q));
- $('customerTable').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num">'+number(x.count)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td></tr>').join('')||'<tr><td colspan="4" class="empty">Customer tidak ditemukan</td></tr>';
+ const all=[...customers.values()];
+ const repeat=all.filter(x=>x.transactions.size>1);
+ const once=all.filter(x=>x.transactions.size===1);
+ const totalCustomer=all.length;
+ const totalTransaction=new Set(rows.map(r=>clean(r['Invoice No'])||clean(r['Order No'])).filter(Boolean)).size;
+ const repeatTransaction=repeat.reduce((sum,x)=>sum+x.transactions.size,0);
+ const repeatSales=repeat.reduce((sum,x)=>sum+x.value,0);
+ const totalSales=rows.reduce((sum,r)=>sum+r._net,0);
+ const pct=(n,d)=>d?(n/d*100).toFixed(1)+'%':'0.0%';
+ $('repeatCustomerPct').textContent=pct(repeat.length,totalCustomer);
+ $('repeatCustomerCount').textContent=number(repeat.length)+' dari '+number(totalCustomer)+' customer';
+ $('repeatTrxPct').textContent=pct(repeatTransaction,totalTransaction);
+ $('repeatTrxCount').textContent=number(repeatTransaction)+' dari '+number(totalTransaction)+' transaksi';
+ $('oneTimeCustomerPct').textContent=pct(once.length,totalCustomer);
+ $('oneTimeCustomerCount').textContent=number(once.length)+' dari '+number(totalCustomer)+' customer';
+ $('repeatSales').textContent=rupiah(repeatSales);
+ $('repeatSalesPct').textContent=pct(repeatSales,totalSales)+' dari total sales';
 }
 function render(){
  if(!sourceRows.length)return;
@@ -221,7 +237,7 @@ function render(){
   return '<tr><td>'+(i+1)+'</td><td>'+esc(name)+'</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
  }).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
  renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
- renderCustomers(rows);
+ renderRepeatCustomers(rows);
  const detail=new Map();rows.forEach(r=>{
   const a=clean(r['Category Lv.3'])||'(Tidak diisi)',b=clean(r['Category Lv.4'])||'(Tidak diisi)',k=a+'|||'+b;
   const x=detail.get(k)||{a,b,qty:0,sales:0};x.qty+=r._qty;x.sales+=r._net;detail.set(k,x);
@@ -240,7 +256,7 @@ $('file').addEventListener('change',async e=>{
 $('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
 $('month').addEventListener('change',render);
 $('status').addEventListener('change',render);
-$('customerSearch').addEventListener('input',()=>renderCustomers(visibleRows));
+
 // Sinkronisasi berkala selama dashboard terbuka; spreadsheet tidak perlu dihubungkan ulang.
 loadPublishedCsv(false);
 setInterval(()=>loadPublishedCsv(true),AUTO_SYNC_MS);
