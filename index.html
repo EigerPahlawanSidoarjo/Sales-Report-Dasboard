@@ -256,12 +256,15 @@ function render(){
  const [yy,mm]=month.split('-').map(Number);
  const today=new Date(),currentKey=keyDate(today),mode=$('status').value;
  const baseRows=sourceRows.filter(r=>{
+  // Exclude seluruh transaksi Paperbag dari semua KPI, ranking, kategori, dan detail.
+  const isPaperbag=Object.values(r).some(value=>/paper\\s*bag/i.test(clean(value)));
+  if(isPaperbag)return false;
   const d=parseDate(r['Order Date']);if(!d||d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;
   const st=clean(r['Bill Status']).toLowerCase();
   if(mode==='valid'&&!['delivered','shipped'].includes(st))return false;
   if(mode==='delivered'&&st!=='delivered')return false;
   return true;
- }).map(r=>{const paperbagText=['Product Name','SKU Name','Item Name','Article Name','Product','Item','Description','Category Lv.3','Category Lv.4'].map(k=>clean(r[k])).join(' ');const isPaperbag=/paper\s*bag/i.test(paperbagText);const qty=parseNumber(r['Quantity']);return {...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:qty,_uptQty:isPaperbag?0:qty};});
+ }).map(r=>{const qty=parseNumber(r['Quantity']);return {...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:qty,_uptQty:qty};});
  const salesNames=[...new Set(baseRows.map(r=>clean(r['Sales Person'])||'(Tidak diisi)'))].sort((a,b)=>a.localeCompare(b,'id'));
  if(selectedSalesPerson&&!salesNames.includes(selectedSalesPerson))selectedSalesPerson='';
  const salesSelect=$('salesPersonFilter');
