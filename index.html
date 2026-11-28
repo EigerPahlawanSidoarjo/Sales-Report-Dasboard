@@ -27,6 +27,8 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px 8px;b
 .bar-row{display:grid;grid-template-columns:minmax(85px,1fr) 2fr auto;gap:9px;align-items:center;margin:10px 0;font-size:12px}
 .bar-bg{height:9px;background:#edf1ee;border-radius:20px;overflow:hidden}.bar{height:100%;background:var(--green);border-radius:20px}
 .empty{padding:28px;text-align:center;color:var(--muted)}
+#people tr[data-sales]{cursor:pointer}#people tr[data-sales]:hover{background:#edf6f0}
+#people tr.selected-sales{background:#dcefe3}
 .customer-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.customer-tools input{min-width:220px}.customer-summary{font-size:12px;color:var(--muted);margin-left:auto}
 .upload{display:inline-flex;align-items:center;gap:8px}
 footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);font-size:11px}
@@ -52,6 +54,11 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  <div class="card"><div class="kpi-label">Rata-rata per Transaksi</div><div class="kpi-value" id="avg">Rp 0</div><div class="kpi-note">Total sales ÷ transaksi</div></div>
  <div class="card"><div class="kpi-label">Sales Kumulatif MTD</div><div class="kpi-value" id="mtdSales">Rp 0</div><div class="kpi-note" id="mtdNote">Akumulasi sales bulan berjalan</div></div>
  <div class="card"><div class="kpi-label">Target Bulan Ini</div><div class="kpi-value" id="monthlyTarget">Rp 970.000.000</div><div class="target-track"><div class="target-fill" id="targetProgressBar"></div></div><div class="kpi-note" id="targetProgressText">0% tercapai · Sisa Rp 970.000.000</div></div>
+</section>
+<section class="card" id="salesDetail" hidden style="margin-bottom:14px">
+ <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 id="salesDetailTitle">Detail Sales Person</h2><button class="secondary" id="clearSalesFilter" type="button">Tampilkan Semua Sales</button></div>
+ <p class="sub" id="salesDetailNote"></p><div class="kpis" id="salesPersonKpis" style="margin:12px 0"></div>
+ <h2>Detail Transaksi dan Produk</h2><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Invoice</th><th>Produk</th><th>Category Lv.3</th><th>Category Lv.4</th><th class="num">Qty</th><th class="num">Net Amount</th></tr></thead><tbody id="salesTransactions"></tbody></table></div>
 </section>
 <section class="grid2">
  <div class="card"><h2>Rekap Sales per Hari</h2><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th class="num">Sales Harian</th></tr></thead><tbody id="daily"></tbody></table></div></div>
@@ -240,18 +247,20 @@ function renderCustomerDetail(rows,totalSales){
  $('customerSummary').textContent=number(filtered.length)+' / '+number(sorted.length)+' konsumen · '+number(repeatCount)+' repeat customer · sales '+rupiah(totalSales);
  $('customerDetail').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td><td class="num">'+number(x.transactionCount)+'</td><td class="num">'+number(x.qty)+'</td><td class="num">'+(x.repeat?'<b style="color:var(--green)">Repeat</b>':'1x')+'</td><td class="num">'+x.contribution.toFixed(2)+'%</td></tr>').join('')||'<tr><td colspan="7" class="empty">Tidak ada data konsumen</td></tr>';
 }
+let selectedSalesPerson='';
 function render(){
  if(!sourceRows.length)return;
  const month=$('month').value;if(!month)return;
  const [yy,mm]=month.split('-').map(Number);
  const today=new Date(),currentKey=keyDate(today),mode=$('status').value;
- const rows=sourceRows.filter(r=>{
+ const baseRows=sourceRows.filter(r=>{
   const d=parseDate(r['Order Date']);if(!d||d.getFullYear()!==yy||d.getMonth()+1!==mm)return false;
-  const s=clean(r['Bill Status']).toLowerCase();
-  if(mode==='valid'&&!['delivered','shipped'].includes(s))return false;
-  if(mode==='delivered'&&s!=='delivered')return false;
+  const st=clean(r['Bill Status']).toLowerCase();
+  if(mode==='valid'&&!['delivered','shipped'].includes(st))return false;
+  if(mode==='delivered'&&st!=='delivered')return false;
   return true;
  }).map(r=>({...r,_date:parseDate(r['Order Date']),_net:parseNumber(r['Net Amount']),_qty:parseNumber(r['Quantity'])}));
+ const rows=selectedSalesPerson?baseRows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===selectedSalesPerson):baseRows;
  visibleRows=rows;
  const daily=new Map();rows.forEach(r=>{const k=keyDate(r._date);daily.set(k,(daily.get(k)||0)+r._net)});
  const lastDay=month===today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')?today.getDate():new Date(yy,mm,0).getDate();
@@ -273,11 +282,21 @@ function render(){
  $('targetProgressBar').style.width=Math.min(100,Math.max(0,targetPct))+'%';
  $('targetProgressText').textContent=targetPct.toFixed(1)+'% tercapai · '+(mtd>=monthlyTarget?'Target terlampaui '+rupiah(mtd-monthlyTarget):'Sisa '+rupiah(targetRemaining));
  $('todayNote').textContent=today.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
- const people=aggregate(rows,'Sales Person');
+ const people=aggregate(baseRows,'Sales Person');
  $('people').innerHTML=people.map(([name,val],i)=>{
-  const subset=rows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===name);
-  return '<tr><td>'+(i+1)+'</td><td>'+esc(name)+'</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
+  const subset=baseRows.filter(r=>(clean(r['Sales Person'])||'(Tidak diisi)')===name);
+  return '<tr data-sales="'+esc(name)+'" class="'+(selectedSalesPerson===name?'selected-sales':'')+'"><td>'+(i+1)+'</td><td><b>'+esc(name)+'</b> ↗</td><td class="num"><b>'+rupiah(val)+'</b></td><td class="num">'+number(subset.reduce((s,r)=>s+r._qty,0))+'</td></tr>';
  }).join('')||'<tr><td colspan="4" class="empty">Tidak ada data</td></tr>';
+
+ if(selectedSalesPerson){
+  $('salesDetail').hidden=false;
+  $('salesDetailTitle').textContent='Pencapaian Sales: '+selectedSalesPerson;
+  $('salesDetailNote').textContent='Data mengikuti filter bulan dan status transaksi yang sedang dipilih.';
+  const ps=rows.reduce((a,r)=>a+r._net,0),pq=rows.reduce((a,r)=>a+r._qty,0);
+  const pi=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])).filter(Boolean));
+  $('salesPersonKpis').innerHTML='<div class="card"><div class="kpi-label">Total Sales</div><div class="kpi-value">'+rupiah(ps)+'</div></div><div class="card"><div class="kpi-label">Qty Terjual</div><div class="kpi-value">'+number(pq)+'</div></div><div class="card"><div class="kpi-label">Jumlah Transaksi</div><div class="kpi-value">'+number(pi.size)+'</div></div><div class="card"><div class="kpi-label">Kontribusi Sales</div><div class="kpi-value">'+(mtd?(ps/mtd*100).toFixed(1):'0.0')+'%</div></div>';
+  $('salesTransactions').innerHTML=rows.slice().sort((a,b)=>b._date-a._date).map(r=>'<tr><td>'+r._date.toLocaleDateString('id-ID')+'</td><td>'+esc(r['Invoice No']||r['Order No']||'-')+'</td><td>'+esc(r['Product Name']||r['SKU Name']||r['Item Name']||r['Article Name']||'-')+'</td><td>'+esc(r['Category Lv.3']||'-')+'</td><td>'+esc(r['Category Lv.4']||'-')+'</td><td class="num">'+number(r._qty)+'</td><td class="num"><b>'+rupiah(r._net)+'</b></td></tr>').join('')||'<tr><td colspan="7" class="empty">Tidak ada transaksi</td></tr>';
+ }else{$('salesDetail').hidden=true;}
  renderBars('cat3',aggregate(rows,'Category Lv.3'));renderBars('cat4',aggregate(rows,'Category Lv.4'));
  renderRepeatCustomers(rows);
  renderCustomerDetail(rows,mtd);
@@ -297,6 +316,8 @@ $('file').addEventListener('change',async e=>{
  }catch(err){alert('Gagal membaca file: '+err.message)}
 });
 $('refresh').addEventListener('click',()=>{isManualUpload=false;loadPublishedCsv(false)});
+$('people').addEventListener('click',e=>{const tr=e.target.closest('tr[data-sales]');if(!tr)return;selectedSalesPerson=tr.dataset.sales;render();});
+$('clearSalesFilter').addEventListener('click',()=>{selectedSalesPerson='';render();});
 $('month').addEventListener('change',render);
 $('status').addEventListener('change',render);
 $('customerSearch').addEventListener('input',render);
