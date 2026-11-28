@@ -130,6 +130,11 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
   <div id="assessmentRecapContent" hidden>
    <div style="display:flex;justify-content:flex-end;margin:10px 0"><button type="button" class="secondary" id="assessmentExport">Export CSV</button></div>
    <div class="table-wrap"><table><thead><tr><th>Waktu Submit</th><th>Periode</th><th>Week</th><th>Sales Person</th><th class="num">Rata-rata Nilai</th><th>Status</th></tr></thead><tbody id="assessmentRecords"><tr><td colspan="6" class="empty">Belum ada assessment tersimpan di browser ini</td></tr></tbody></table></div>
+   <div class="card" style="margin-top:14px;background:#f8faf8">
+    <h2>Laporan Individu & Rekomendasi Action</h2>
+    <div class="field" style="max-width:420px"><label>PILIH SALES PERSON</label><select id="assessmentReportPerson"><option value="">Pilih individu dari hasil assessment</option></select></div>
+    <div id="assessmentIndividualReport" style="margin-top:14px"><div class="empty">Pilih Sales Person untuk melihat bagan hasil, problem utama, dan rekomendasi action.</div></div>
+   </div>
    <p class="kpi-note" style="margin-top:9px">Catatan: jawaban saat ini disimpan di browser/perangkat yang digunakan. Gunakan Export CSV untuk mengunduh rekap dan memindahkannya ke penyimpanan bersama.</p>
    <button type="button" class="secondary" id="assessmentRecapLock" style="margin-top:8px">Kunci Kembali Rekap</button>
   </div>
@@ -465,6 +470,51 @@ function renderAssessmentRecords(){
  const rows=assessmentRecords();
  $('assessmentRecords').innerHTML=rows.length?rows.slice().reverse().map(r=>'<tr><td>'+esc(new Date(r.submittedAt).toLocaleString('id-ID'))+'</td><td>'+esc(r.period)+'</td><td>'+esc(r.week||'-')+'</td><td>'+esc(r.name)+'</td><td class="num"><b>'+Number(r.average||0).toFixed(2)+'</b></td><td><span style="color:var(--green);font-weight:bold">Tersimpan</span></td></tr>').join(''):'<tr><td colspan="5" class="empty">Belum ada assessment tersimpan di browser ini</td></tr>';
 }
+const assessmentCategoryTips = {
+ 'B. Sales Achievement · Pencapaian Penjualan':{problem:'Pencapaian target, konsistensi sales harian, atau kemampuan meningkatkan nilai transaksi masih perlu diperkuat.',actions:['Buat target sales harian dan pecah menjadi target per shift.','Terapkan minimal satu penawaran add-on dan satu alternatif upselling pada setiap interaksi yang relevan.','Evaluasi pencapaian, ATV, dan UPT setiap akhir shift bersama Leader.']},
+ 'C. Selling Skill & Customer Service':{problem:'Kualitas proses pelayanan, penggalian kebutuhan, penanganan keberatan, atau closing menjadi area pengembangan.',actions:['Biasakan greeting dan ajukan minimal dua pertanyaan untuk menggali kebutuhan customer.','Latih role-play handling objection dan closing selama 10 menit sebelum operasional.','Minta feedback Leader dari observasi pelayanan minimal dua kali dalam seminggu.']},
+ 'D. Product Knowledge':{problem:'Penguasaan fungsi, material, teknologi, atau perbandingan produk belum merata.',actions:['Pelajari dua artikel produk setiap minggu dan catat fitur serta manfaat utamanya.','Lakukan product sharing singkat dengan rekan sebelum atau sesudah shift.','Praktikkan rekomendasi dua produk alternatif sesuai kebutuhan customer.']},
+ 'E. Teamwork & Operational Performance':{problem:'Konsistensi teamwork, inisiatif, kedisiplinan, atau standar operasional perlu ditingkatkan.',actions:['Konfirmasi pembagian tugas dan prioritas area pada awal shift.','Lakukan pengecekan display, kebersihan, dan SOP menggunakan checklist harian.','Ambil inisiatif membantu rekan saat traffic tinggi dan komunikasikan progres kepada Leader.']}
+};
+function renderIndividualAssessmentReport(){
+ const name=$('assessmentReportPerson').value,host=$('assessmentIndividualReport');
+ if(!name){host.innerHTML='<div class="empty">Pilih Sales Person untuk melihat laporan individu.</div>';return}
+ const records=assessmentRecords().filter(r=>r.name===name).sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
+ if(!records.length){host.innerHTML='<div class="empty">Belum ada hasil assessment untuk individu ini.</div>';return}
+ const rec=records[0],ratingAnswers=rec.answers.filter(a=>a.type==='rating');
+ const categoryScores=assessmentGroups.map(g=>{
+  const qs=new Set(g.items.filter(x=>x[1]==='rating').map(x=>x[0]));
+  const vals=ratingAnswers.filter(a=>qs.has(a.question)).map(a=>Number(a.answer)).filter(Number.isFinite);
+  return {name:g.title,score:vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0,count:vals.length};
+ }).filter(x=>x.count);
+ const average=ratingAnswers.length?ratingAnswers.reduce((s,a)=>s+Number(a.answer),0)/ratingAnswers.length:0;
+ const lowest=categoryScores.slice().sort((a,b)=>a.score-b.score);
+ const strongest=categoryScores.slice().sort((a,b)=>b.score-a.score)[0];
+ const weak=lowest.filter(x=>x.score<3.5).slice(0,2);
+ const focus=weak.length?weak:lowest.slice(0,1);
+ const textAnswers=rec.answers.filter(a=>a.type==='text'&&a.answer.trim());
+ const categoryForQuestion=q=>assessmentGroups.find(g=>g.items.some(x=>x[0]===q))?.title;
+ const relatedText=focus.flatMap(cat=>textAnswers.filter(a=>categoryForQuestion(a.question)===cat.name).map(a=>({question:a.question,answer:a.answer}))).slice(0,5);
+ const actions=focus.flatMap(cat=>(assessmentCategoryTips[cat.name]?.actions||['Diskusikan hasil evaluasi dengan Store Leader dan sepakati target perbaikan mingguan.']).map(x=>({category:cat.name,text:x})));
+ const status=average>=4.5?'Sangat Baik':average>=3.5?'Baik':average>=2.5?'Cukup':'Perlu Pendampingan';
+ const color=average>=3.5?'#176b45':'#b45309';
+ host.innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;margin-bottom:14px">'+
+  '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Rata-rata Individu</div><div class="kpi-value">'+average.toFixed(2)+'/5</div><div class="kpi-note">Status: <b style="color:'+color+'">'+status+'</b></div></div>'+
+  '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Periode & Week</div><div class="kpi-value" style="font-size:20px">'+esc(rec.period)+' · '+esc(rec.week||'-')+'</div><div class="kpi-note">Submit '+esc(new Date(rec.submittedAt).toLocaleDateString('id-ID'))+'</div></div>'+
+  '<div class="card" style="flex:1;min-width:150px"><div class="kpi-label">Area Terkuat</div><div style="font-weight:800;margin-top:8px">'+esc(strongest?.name.split(' · ')[0]||'-')+'</div><div class="kpi-note">'+(strongest?strongest.score.toFixed(2)+'/5':'Belum ada data')+'</div></div></div>'+
+  '<h3 style="font-size:13px;margin:10px 0">Bagan Penilaian per Kategori</h3>'+
+  categoryScores.map(x=>'<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:5px"><b>'+esc(x.name)+'</b><b>'+x.score.toFixed(2)+'/5</b></div><div style="height:12px;border-radius:20px;background:#e9eeea;overflow:hidden"><div style="height:100%;width:'+(x.score/5*100)+'%;background:'+(x.score<3?'#c16a36':'#238052')+';border-radius:20px"></div></div></div>').join('')+
+  '<div class="grid2" style="margin:16px 0"><div class="card" style="background:#fff8f1"><h3 style="font-size:13px;margin:0 0 8px">Problem Utama / Area Prioritas</h3>'+
+  (focus.map(cat=>'<p style="font-size:12px;margin:8px 0"><b>'+esc(cat.name)+'</b> · Nilai '+cat.score.toFixed(2)+'/5<br>'+esc(assessmentCategoryTips[cat.name]?.problem||'Perlu ditinjau lebih lanjut bersama Store Leader.')+'</p>').join(''))+
+  (relatedText.length?'<div style="border-top:1px solid #eadfd5;padding-top:8px;margin-top:8px"><b style="font-size:11px">Catatan dari jawaban individu</b>'+relatedText.map(a=>'<p style="font-size:11px;margin:6px 0"><b>'+esc(a.question)+'</b><br>'+esc(a.answer)+'</p>').join('')+'</div>':'<p class="kpi-note">Tidak ada jawaban naratif pada kategori prioritas.</p>')+
+  '</div><div class="card" style="background:#f1f8f3"><h3 style="font-size:13px;margin:0 0 8px">Kekuatan yang Perlu Dipertahankan</h3>'+
+  (strongest?'<p style="font-size:12px"><b>'+esc(strongest.name)+'</b><br>Nilai '+strongest.score.toFixed(2)+'/5. Pertahankan konsistensi dan bagikan praktik baik kepada tim.</p>':'-')+
+  '<p class="kpi-note">Analisis menggunakan nilai skala 1–5 dan jawaban tertulis pada assessment terakhir.</p></div></div>'+
+  '<h3 style="font-size:13px;margin:12px 0 8px">Action Recommendation / Rencana Tindak Lanjut</h3>'+
+  '<ol style="padding-left:20px;margin:0">'+actions.map(a=>'<li style="margin:8px 0;font-size:12px"><b>'+esc(a.category.split(' · ')[0])+':</b> '+esc(a.text)+'</li>').join('')+'</ol>'+
+  '<div class="card" style="margin-top:14px;background:#f8faf8"><b style="font-size:12px">Komitmen coaching yang disarankan</b><p style="font-size:12px;margin:6px 0 0">Store Leader dan Sales Person menyepakati 1–2 prioritas utama, melakukan check-in mingguan, lalu mengukur perubahan pada assessment berikutnya.</p></div>';
+}
+
 
 const ASSESSMENT_RECAP_PASSWORD='110496';
 $('assessmentRecapUnlock').addEventListener('click',function(){
@@ -477,7 +527,11 @@ $('assessmentRecapUnlock').addEventListener('click',function(){
  $('assessmentRecapPassword').value='';
  $('assessmentRecapMessage').textContent='';
  renderAssessmentRecords();
+ const names=[...new Set(assessmentRecords().map(r=>r.name))].sort((a,b)=>a.localeCompare(b,'id'));
+ $('assessmentReportPerson').innerHTML='<option value="">Pilih individu dari hasil assessment</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+ $('assessmentIndividualReport').innerHTML='<div class="empty">Pilih Sales Person untuk melihat bagan hasil, problem utama, dan rekomendasi action.</div>';
 });
+$('assessmentReportPerson').addEventListener('change',renderIndividualAssessmentReport);
 $('assessmentRecapPassword').addEventListener('keydown',function(e){if(e.key==='Enter')$('assessmentRecapUnlock').click()});
 $('assessmentRecapLock').addEventListener('click',function(){
  $('assessmentRecapContent').hidden=true;
