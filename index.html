@@ -48,10 +48,10 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  <div class="card"><div class="kpi-label">Sales Hari Ini</div><div class="kpi-value" id="today">Rp 0</div><div class="kpi-note" id="todayNote">Tanggal berjalan</div></div>
  <div class="card"><div class="kpi-label">Sales Kumulatif (MTD)</div><div class="kpi-value" id="mtd">Rp 0</div><div class="kpi-note" id="mtdNote">Tanggal 1 sampai hari berjalan</div></div>
  <div class="card"><div class="kpi-label">Total Transaksi</div><div class="kpi-value" id="trx">0</div><div class="kpi-note">Nomor invoice/order unik</div></div>
- <div class="card"><div class="kpi-label">Rata-rata per Transaksi</div><div class="kpi-value" id="avg">Rp 0</div><div class="kpi-note">Sales kumulatif · transaksi</div></div>
+ <div class="card"><div class="kpi-label">Rata-rata per Transaksi</div><div class="kpi-value" id="avg">Rp 0</div><div class="kpi-note">Total sales ÷ transaksi</div></div>
 </section>
 <section class="grid2">
- <div class="card"><h2>Rekap Sales per Hari <span class="sub">· harian dan kumulatif</span></h2><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th class="num">Sales Harian</th><th class="num">Sales Kumulatif</th></tr></thead><tbody id="daily"></tbody></table></div></div>
+ <div class="card"><h2>Rekap Sales per Hari</h2><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th class="num">Sales Harian</th></tr></thead><tbody id="daily"></tbody></table></div></div>
  <div class="card"><h2>Sales Person <span class="sub">· berdasarkan Net Amount</span></h2><div class="table-wrap"><table><thead><tr><th>#</th><th>Sales Person</th><th class="num">Sales</th><th class="num">Qty</th></tr></thead><tbody id="people"></tbody></table></div></div>
 </section>
 <section class="grid2">
@@ -70,10 +70,10 @@ footer{max-width:1200px;margin:14px auto 30px;padding:0 16px;color:var(--muted);
  <p class="kpi-note" style="margin-top:12px">Dihitung dari customer unik dan nomor Invoice No (jika kosong menggunakan Order No) yang unik. Mengikuti filter bulan dan status transaksi.</p>
 </section>
 <section class="card" style="margin-bottom:14px">
- <h2>Detail Konsumen <span class="sub">· kontribusi sales dan persentase kumulatif</span></h2>
+ <h2>Detail Konsumen <span class="sub">· kontribusi sales</span></h2>
  <div class="customer-tools"><input id="customerSearch" type="search" placeholder="Cari nama konsumen..."><span class="customer-summary" id="customerSummary">0 konsumen</span></div>
- <div class="table-wrap"><table><thead><tr><th>#</th><th>Nama Konsumen</th><th class="num">Value Sales</th><th class="num">Transaksi</th><th class="num">Qty</th><th class="num">Frekuensi</th><th class="num">Kontribusi Sales</th><th class="num">Kumulatif</th></tr></thead><tbody id="customerDetail"></tbody></table></div>
- <p class="kpi-note" style="margin-top:10px">Kontribusi = sales konsumen ÷ total sales pada filter. Kumulatif = akumulasi kontribusi konsumen sesuai urutan value sales terbesar.</p>
+ <div class="table-wrap"><table><thead><tr><th>#</th><th>Nama Konsumen</th><th class="num">Value Sales</th><th class="num">Transaksi</th><th class="num">Qty</th><th class="num">Frekuensi</th><th class="num">Kontribusi Sales</th></tr></thead><tbody id="customerDetail"></tbody></table></div>
+ <p class="kpi-note" style="margin-top:10px">Kontribusi = sales konsumen ÷ total sales pada filter.</p>
 </section>
 </main>
 <footer>Sumber data utama: Google Spreadsheet CSV yang dipublikasikan. Dashboard memeriksa pembaruan spreadsheet setiap 60 detik selama halaman terbuka. Upload Excel hanya tersedia sebagai cadangan.</footer>
@@ -236,7 +236,7 @@ function renderCustomerDetail(rows,totalSales){
  const filtered=sorted.filter(x=>norm(x.name).includes(query));
  const repeatCount=sorted.filter(x=>x.repeat).length;
  $('customerSummary').textContent=number(filtered.length)+' / '+number(sorted.length)+' konsumen · '+number(repeatCount)+' repeat customer · sales '+rupiah(totalSales);
- $('customerDetail').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td><td class="num">'+number(x.transactionCount)+'</td><td class="num">'+number(x.qty)+'</td><td class="num">'+(x.repeat?'<b style="color:var(--green)">Repeat</b>':'1x')+'</td><td class="num">'+x.contribution.toFixed(2)+'%</td><td class="num"><b>'+Math.min(x.cumulative,100).toFixed(2)+'%</b></td></tr>').join('')||'<tr><td colspan="8" class="empty">Tidak ada data konsumen</td></tr>';
+ $('customerDetail').innerHTML=filtered.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num"><b>'+rupiah(x.value)+'</b></td><td class="num">'+number(x.transactionCount)+'</td><td class="num">'+number(x.qty)+'</td><td class="num">'+(x.repeat?'<b style="color:var(--green)">Repeat</b>':'1x')+'</td><td class="num">'+x.contribution.toFixed(2)+'%</td></tr>').join('')||'<tr><td colspan="7" class="empty">Tidak ada data konsumen</td></tr>';
 }
 function render(){
  if(!sourceRows.length)return;
@@ -258,10 +258,10 @@ function render(){
   const k=yy+'-'+String(mm).padStart(2,'0')+'-'+String(day).padStart(2,'0'),v=daily.get(k)||0;cumulative+=v;
   dailyHtml+='<tr><td>'+String(day).padStart(2,'0')+'/'+String(mm).padStart(2,'0')+'/'+yy+'</td><td class="num">'+rupiah(v)+'</td><td class="num"><b>'+rupiah(cumulative)+'</b></td></tr>';
  }
- $('daily').innerHTML=dailyHtml||'<tr><td colspan="3" class="empty">Tidak ada data</td></tr>';
+ $('daily').innerHTML=dailyHtml||'<tr><td colspan="2" class="empty">Tidak ada data</td></tr>';
  const mtd=rows.reduce((s,r)=>s+r._net,0),todaySales=rows.filter(r=>keyDate(r._date)===currentKey).reduce((s,r)=>s+r._net,0);
  const invoices=new Set(rows.map(r=>clean(r['Invoice No']||r['Order No'])).filter(Boolean));
- $('today').textContent=rupiah(todaySales);$('mtd').textContent=rupiah(mtd);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);
+ $('today').textContent=rupiah(todaySales);$('trx').textContent=number(invoices.size);$('avg').textContent=rupiah(invoices.size?mtd/invoices.size:0);
  $('todayNote').textContent=today.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
  $('mtdNote').textContent=number(rows.length)+' baris item · '+month;
  const people=aggregate(rows,'Sales Person');
